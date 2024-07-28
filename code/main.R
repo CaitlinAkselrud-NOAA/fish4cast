@@ -13,6 +13,7 @@ library(janitor)
 library(randomForest)
 library(future)
 library(dials)
+library(magrittr)
 
 # functions ---------------------------------------------------------------
 
@@ -40,6 +41,12 @@ user_splitrule <- c("extratrees")
 # uncertainty check:
 # # a vector of numbers or single value over which to re-run trained model to assess uncertainty
 user_checklen <- c(50, 100, 150)
+
+# testing data method
+# 1 = all training data together
+# 2 = k-fold training data
+# 3 = both
+user_trainmethod = 3
 
 # model name
 user_modelname <- "base_simple"
@@ -69,9 +76,28 @@ in_features <- in_cols[1:7]
 in_target <- in_cols[8]
 
 # designate which column is time (if using)
+# CIA: currently required, can add option later
 in_time <- in_cols[9]
 
 # future: spatial?
+
+# data splits:
+# # tell cross-validation how to structure k-folds
+k_init_time_train = NA # set to NA to use default values; number of data rows in first k-fold training data
+k_assess_train = NA # set to NA to use default values;
+k_cumulative_train = NA # set to NA to use default values;
+k_skip_train = NA # set to NA to use default values;
+k_lag_train = NA # set to NA to use default values;
+
+if(user_trainmethod > 1)
+{
+  k_init_time_test = NA # set to NA to use default values; number of data rows in first k-fold training data
+  k_assess_test = NA # set to NA to use default values;
+  k_cumulative_test = NA # set to NA to use default values;
+  k_skip_test = NA # set to NA to use default values;
+  k_lag_test = NA # set to NA to use default values;
+}
+
 
 # * random forest settings ------------------------------------------------
 
@@ -99,7 +125,7 @@ setup_datasplit <- TRUE
 # if you have a custom split, is it based on data results or user setting?
 # TRUE = based on automated data results
 # FALSE = user specified ratio
-setup_customsplit <- TRUE
+setup_customsplit <- FALSE #TRUE scenario not yet operational
 
 # a custom ratio must be > 0 and < 1; 0.60 to 0.75 is standard in the literature
 # the custom ratio represents the proportion of training data
@@ -110,7 +136,7 @@ setup_customratio <- 0.67
 # Test mode
 # TRUE means code will run using a single computing core
 # FALSE means the code will run in parallel using (total cores available - 2)
-test_mode <- FALSE
+test_mode <- TRUE
 # this is for the parallelization of the design set, tree check, and final check
 if(test_mode == TRUE) {n_workers <- 1
 } else{n_workers <- (availableCores()-2)}
@@ -126,7 +152,16 @@ future::plan(future::multicore, workers = n_workers)
 #   this is important later when you do your training/testing splits
 if(in_ts == TRUE){in_data <- in_data %>% arrange(in_time) }
 
+# need consistent naming of target and time vars
+in_data %<>%  dplyr::rename(target = in_target)
+in_data %<>%  dplyr::rename(time = in_time)
+
 # * input data exploration ------------------------------------------------
+# CIA: Detmer and Eric Ward paper: GAMs as ecosystem threshold detection tool
+# - jacknife resampling
+# - if >[some fraction] jackknife iters detected a threshold,
+#    calc mean and CI of location (here- time point)
+
 # train/test split (regime breakpoints?) in target
 
 # non-stationarity in target
@@ -141,6 +176,8 @@ if(in_ts == TRUE){in_data <- in_data %>% arrange(in_time) }
 
 # based on results, train/test split recommended
 split_recommended <- NA #CIA fill in here
+
+# CIA: notes- ideally, train/test is approx 60-75% data, AND not on a regime shift
 
 # * input data setup & splits ------------------------------------------------------
 
@@ -182,9 +219,44 @@ write(paste("Train/test splitting ratio: ", split_ratio), file = here::here("out
 
 # ** training cross-validation -------------------------------------------
 
+kfold_train <- get_kfold(k_data_in = training(dat_split),
+                         k_init_time = k_init_time_train,
+                         k_assess = k_assess_train,
+                         k_cumulative = k_cumulative_train,
+                         k_skip = k_skip_train,
+                         k_lag= k_lag_train)
+
+train_slices <- dim(kfold_train)[1]
+
+train_baked <- list()
+
+# CIA: convert this to an apply statement
+for(i in 1:(train_slices))
+{
+  train_baked[[i]] <- get_baked(kfold = kfold_train,
+                                splitN=i)
+}
 
 # ** optional testing cross-validation ---------------------------------------
 
+if(user_trainmethod > 1)
+{
+  kfold_test <- get_kfold(k_data_in = testing(dat_split),
+                           k_init_time = k_init_time_test,
+                           k_assess = k_assess_test,
+                           k_cumulative = k_cumulative_test,
+                           k_skip = k_skip_test,
+                           k_lag= k_lag_test)
+  test_slices <- dim(kfold_test)[1]
+
+  test_baked <- list()
+
+  for(i in 1:(test_slices))
+  {
+    test_baked[[i]] <- get_baked(kfold = kfold_test,
+                                 splitN=i)
+  }
+}
 
 
 
