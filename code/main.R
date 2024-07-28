@@ -14,6 +14,7 @@ library(randomForest)
 library(future)
 library(dials)
 library(magrittr)
+library(ranger)
 
 # functions ---------------------------------------------------------------
 
@@ -21,8 +22,18 @@ library(magrittr)
 functions <- list.files(here::here("functions"))
 purrr::walk(functions, ~ source(here::here("functions", .x)))
 
-file.create(here::here("output", "warnings.txt"), showWarnings = F)
-file.create(here::here("output", "info.txt"), showWarnings = F)
+
+# model name
+user_modelname <- "base_simple"
+
+dir.create(here::here("input"), showWarnings = F)
+dir.create(here::here("output"), showWarnings = F)
+dir.create(here::here("output", user_modelname), showWarnings = F)
+dir.create(here::here("output", user_modelname, "diagnostic_plots"), showWarnings = F)
+
+
+file.create(here::here("output", user_modelname, "warnings.txt"), showWarnings = F)
+file.create(here::here("output", user_modelname, "info.txt"), showWarnings = F)
 
 # specified parameters ----------------------------------------------------
 
@@ -48,9 +59,6 @@ user_checklen <- c(50, 100, 150)
 # 3 = both
 user_trainmethod = 3
 
-# model name
-user_modelname <- "base_simple"
-
 
 # * about input data ------------------------------------------------------
 
@@ -67,7 +75,8 @@ in_data <- read_csv(here::here("input", in_filename)) %>%
 in_cols <- colnames(in_data)
 print("Input column names read in as: ")
 print(in_cols)
-write(paste("Cleaned input column names read in as: ", in_cols), file = here::here("output", "info.txt"), append = TRUE)
+write(paste("Cleaned input column names read in as: ", in_cols),
+      file = here::here("output", user_modelname,"info.txt"), append = TRUE)
 
 # designate which input columns are features
 in_features <- in_cols[1:7]
@@ -131,6 +140,13 @@ setup_customsplit <- FALSE #TRUE scenario not yet operational
 # the custom ratio represents the proportion of training data
 setup_customratio <- 0.67
 
+# what metric do you want to use to select the best hparam set?
+# current options:
+# 1 = rmse; root mean squared error, same units as orig data
+# 2 = mae; mean absolute error, same units as orig data
+# 3 = rsq; coeeficent of determination using correlation (not traditional SSQ method)
+# 4 = rpd; ratio of performance to deviation  measures of consistency/correlation between observed and predicted values (and not of accuracy)
+setup_hp_select <- 1
 
 # * processing settings ---------------------------------------------------
 # Test mode
@@ -212,9 +228,10 @@ if(setup_datasplit == TRUE) # standard optimal split based on Joseph (2022)
   }
 }
 
-write_csv(training(dat_split), path = here::here("output", "training.csv"))
-write_csv(testing(dat_split), path = here::here("output", "testing.csv"))
-write(paste("Train/test splitting ratio: ", split_ratio), file = here::here("output", "info.txt"), append = TRUE)
+write_csv(training(dat_split), path = here::here("output", user_modelname, "training.csv"))
+write_csv(testing(dat_split), path = here::here("output", user_modelname, "testing.csv"))
+write(paste("Train/test splitting ratio: ", split_ratio),
+      file = here::here("output", user_modelname,"info.txt"), append = TRUE)
 
 
 # ** training cross-validation -------------------------------------------
@@ -268,19 +285,16 @@ if(user_trainmethod > 1)
 
 # auto-detect min_n, mtry
 
-# min_n_maximum <- #detect min n in smallest fold
+min_n_maximum <- dim(train_baked[[1]]$baked_squid)[1]
 
-# CIA: modify following:
-# tune_grid <- parameters(min_n(),mtry())  %>%
-#   dials::finalize(mtry(), x = baked_data[[1]]$baked_squid %>% dplyr::select(-year, -seas, -cdfg_4))
-# tune_grid$object[[1]]$range$upper <-min_n_maximum
-tune_grid <- dials::parameters(min_n(),mtry())  %>% #CIA: problem with parameters() function
-    dials::finalize(mtry(), x = in_data  %>% dplyr::select(-in_target, -in_time)) #CIA: if time incl; ALSO, using whole data set or just training data- check
+
+tune_grid <- dials::parameters(min_n(),mtry())  %>%
+    dials::finalize(mtry(), x = in_data  %>% dplyr::select(-target, -time))
 tune_grid$object[[1]]$range$upper <-min_n_maximum
 
-# alt method, get max entropy with range of tree numbers incl:
+# alt method, get params with range of tree numbers incl:
 # tune_grid <- parameters(min_n(),mtry(), trees(range(test_options$tree)))  %>%
-#   dials::finalize(mtry(), x = baked_data[[1]]$baked_squid %>% dplyr::select(-year, -seas, -cdfg_4))
+#   dials::finalize(mtry(), x = baked_data[[1]]$baked_squid %>% dplyr::select(-year, -seas, -target))
 # tune_grid$object[[1]]$range$upper <-min_n_maximum
 
 # * create grid -----------------------------------------------------------
@@ -290,7 +304,7 @@ if(setup_hgrid == F) {setup_gridmax = user_hparam_grid_max}
 if(!is.logical(setup_hgrid)) {
   err_hparam_grid <- "ERROR: designate TRUE or FALSE for 'setup_hgrid' for a full or reduced hyperparamter grid size (respectively)"
   print(err_hparam_grid)
-  write(err_hparam_grid, file = here::here("output", "warnings.txt"), append = TRUE)
+  write(err_hparam_grid, file = here::here("output", user_modelname, "warnings.txt"), append = TRUE)
 }
 
 # new or import grid
@@ -330,15 +344,214 @@ if(setup_newgrid == TRUE) #create a new grid
 if(!is.logical(setup_newgrid)){
   err_hparam_grid <- "ERROR: designate TRUE or FALSE for 'setup_newgrid' for creating new or reading in a hyperparameter (respectively)"
   print(err_hparam_grid)
-  write(err_hparam_grid, file = here::here("output", "warnings.txt"), append = TRUE)
+  write(err_hparam_grid, file = here::here("output", user_modelname, "warnings.txt"), append = TRUE)
 }
 
 # * training --------------------------------------------------------------
 
+train_time <- system.time({
+  print("starting hyperparam tuning-- please be patient")
+  print(paste("start time: ", Sys.time()))
+  squid_forests <- list()
+  # parallel processing of the forests
+  for(i in 1:(train_slices)) #for each k-fold
+  { #in the following step, you are generating every hparam combo for a single k-fold
+    squid_forests[[i]] <- furrr::future_pmap(list(mtry = (design_set$mtry),
+                                                  ntrees = (design_set$trees),
+                                                  minn = (design_set$min_n),
+                                                  splitrule = (design_set$splitrule)),
+                                             get_forest,
+                                             analy_data = train_baked[[i]]$baked_squid,
+                                             assm_data =  train_baked[[i]]$baked_assessment_squid,
+                                             .progress = TRUE)
+
+  }
+  # plan(sequential)
+  gc()
+  # arrange forest results, and extract rmse
+  print("almost done with hyperparam tuning....")
+  print(paste("start saving time: ", Sys.time()))
+  for(j in 1:dim(design_set)[1])
+  {
+    if(j == 1)
+    {
+      r_forest_all <- list()
+      rmse_slice <- vector(length = dim(design_set)[1]) #rmse across all slices for each hyperparam combo
+      mae_slice <- vector(length = dim(design_set)[1])
+      rsq_slice <- vector(length = dim(design_set)[1])
+      rpd_slice <- vector(length = dim(design_set)[1])
+    }
+    obsv_pred_assm <- NULL  #re-set for each hyperparam set
+    for(i in 1:train_slices)
+    {
+      if(i ==1){r_forests <- list()}
+      r_forests[[i]] <- squid_forests[[i]][[j]]
+      obsv_pred_assm <- obsv_pred_assm %>% bind_rows(r_forests[[i]]$assm_pred)
+    }
+    r_forest_all[[j]] <- r_forests
+    # rmse is across all k-folds for each unique hparam set
+    rmse_slice[j] <-  yardstick::rmse_vec(truth = obsv_pred_assm$target, estimate = obsv_pred_assm$.pred)
+    mae_slice[j] <-  yardstick::mae_vec(truth = obsv_pred_assm$target, estimate = obsv_pred_assm$.pred)
+    rsq_slice[j] <-  yardstick::rsq_vec(truth = obsv_pred_assm$target, estimate = obsv_pred_assm$.pred)
+    rpd_slice[j] <-  yardstick::rpd_vec(truth = obsv_pred_assm$target, estimate = obsv_pred_assm$.pred)
+    # CIA: see yardstick pacakge for more metric options: https://yardstick.tidymodels.org/articles/metric-types.html
+
+  }
+  print(paste("end hyperparam tuning time: ", Sys.time()))
+})
+
+# FIND THE BEST PARAMETER SET
+# 1 = rmse
+# 2 = mae
+# 3 = rsq
+# 4 = rpd
+
+best_metric <- dplyr::case_when(setup_hp_select == 1 ~ min(rmse_slice),
+                                setup_hp_select == 2 ~ min(mae_slice),
+                                setup_hp_select == 3 ~ max(rsq_slice),
+                                setup_hp_select == 4 ~ min(rpd_slice))
+
+best_hyperparam_set <- dplyr::case_when(setup_hp_select == 1 ~ which.min(rmse_slice),
+                                        setup_hp_select == 2 ~ which.min(mae_slice),
+                                        setup_hp_select == 3 ~ which.max(rsq_slice),
+                                        setup_hp_select == 4 ~ which.min(rpd_slice))
+# SAVE BEST TUNED MODEL
+best_ntrees <- r_forest_all[[best_hyperparam_set]][[1]]$model$fit$num.trees
+best_mtry <- r_forest_all[[best_hyperparam_set]][[1]]$model$fit$mtry
+best_minn <-r_forest_all[[best_hyperparam_set]][[1]]$model$fit$min.node.size
+best_splitrule <-r_forest_all[[best_hyperparam_set]][[1]]$model$fit$splitrule
+
+train_results <- bind_cols(ntrees = best_ntrees,
+                           mtry = best_mtry,
+                           min_n = best_minn,
+                           splitrule = best_splitrule)
+
+# SAVE VARIABLE IMPORTANCE FOR ALL FOLDS IN TUNED MODEL
+for(i in 1: train_slices)
+{
+  if(i == 1){var_import_slices_train <- NULL}
+  var_import <- r_forest_all[[best_hyperparam_set]][[i]]$var_importance %>%
+    as_tibble() %>%
+    bind_cols(names = names(r_forest_all[[best_hyperparam_set]][[i]]$var_importance)) %>%
+    pivot_wider(values_from = value, names_from = names)
+  var_import_slices_train <- bind_rows(var_import_slices_train, var_import)
+}
+
+# trained model info:
+write(paste("Time elapsed for model training (mins): ", round(train_time[3], digits = 2)),
+      file = here::here("output", user_modelname, "info.txt"), append = TRUE)
+write(paste("Design set number of combos: ", dim(design_set)[1]),
+      file = here::here("output", user_modelname, "info.txt"), append = TRUE)
+write_csv(train_results, path = here::here("output", user_modelname, "train_hparam_results.csv"))
+
+# save best model info
+dir_path <-  here::here("output", user_modelname, "tuned_model.txt")
+sink(dir_path)
+print(r_forest_all[[best_hyperparam_set]])
+sink()
 
 # * testing ---------------------------------------------------------------
 
 
 # * output ----------------------------------------------------------------
+
+# training output:
+# hyperparameter stuff:
+
+
+
+# variable importance:
+write_csv(var_import_slices_train, path = here::here("output", user_modelname, "train_var_import.csv"))
+
+# * * training diagnostic plots --------------------------------------------
+
+# save histogram
+p_hist_rmse <- ggplot() +
+  geom_histogram(aes(rmse_slice), fill = "black", color = "white") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0))+
+  labs(x = "RMSE",
+       y = "Frequency")
+p_hist_mae <- ggplot() +
+  geom_histogram(aes(mae_slice), fill = "black", color = "white") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0))+
+  labs(x = "MAE",
+       y = "Frequency")
+p_hist_rsq <- ggplot() +
+  geom_histogram(aes(rsq_slice), fill = "black", color = "white") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0))+
+  labs(x = "R^2",
+       y = "Frequency")
+p_hist_rpd <- ggplot() +
+  geom_histogram(aes(rpd_slice), fill = "black", color = "white") +
+  theme_classic() +
+  scale_y_continuous(expand = c(0,0))+
+  labs(x = "RPD",
+       y = "Frequency")
+
+# save ggplots
+p_hyperparams_trees <- ggplot() +
+  geom_point(aes(x = design_set$trees, y = rmse_slice, color = as.factor(design_set$min_n)), size = 2) +
+  theme_classic() +
+  labs(x = "Number of trees",
+       y = "RMSE",
+       color = "Min num nodes") #+
+# scale_color_manual(values=c("#762a83", "#1b7837"))
+
+p_hyperparams_trees2 <- ggplot() +
+  geom_point(aes(x = design_set$trees, y = rmse_slice, color = as.factor(design_set$mtry)), size = 2) +
+  theme_classic() +
+  labs(x = "Number of trees",
+       y = "RMSE",
+       color = "Num predictors") #+
+# scale_color_manual(values=c("#762a83", "#1b7837"))
+
+
+p_hyperparams_minn <- ggplot() +
+  geom_point(aes(x = design_set$min_n, y = rmse_slice, color = as.factor(design_set$trees)), size = 2) +
+  theme_classic() +
+  labs(x = "Minimum number of data points per node",
+       y = "RMSE",
+       color = "Number of trees") #+
+# scale_color_manual(values=c("#762a83", "#1b7837"))
+
+
+p_hyperparams_mtry <- ggplot() +
+  geom_point(aes(x = design_set$mtry, y = rmse_slice, color = as.factor(design_set$trees)), size = 2) +
+  theme_classic() +
+  labs(x = "Number of predictors randomly sampled",
+       y = "RMSE",
+       color = "Number of trees") #+
+# scale_color_manual(values=c("#762a83", "#1b7837"))
+
+# trees
+
+tree_plot <-
+  bind_cols(design_set, rmse_slice=rmse_slice) %>%
+  ggplot()+
+  geom_line(aes(x = trees, y = rmse_slice)) +
+  geom_point(aes(x = trees, y = rmse_slice)) +
+  theme_classic()+
+  xlab("Number of trees")+
+  ylab("RMSE")+
+  # facet_wrap(~combo)
+  facet_wrap(vars(min_n, mtry), labeller = "label_both") +
+  theme(axis.text.x=element_text(angle=90, hjust=1))
+# tree_plot
+if(test_mode == TRUE) {tree_plot}
+
+# SAVE plots
+
+get_plot_save(plot = p_hist_rmse, plotname_png = "p_hist_rmse.png", model_name = user_modelname)
+get_plot_save(plot = p_hist_mae, plotname_png = "p_hist_mae.png", model_name = user_modelname)
+get_plot_save(plot = p_hist_rsq, plotname_png = "p_hist_rsq.png", model_name = user_modelname)
+get_plot_save(plot = p_hist_rpd, plotname_png = "p_hist_rpd.png", model_name = user_modelname)
+get_plot_save(plot = p_hyperparams_trees, plotname_png = "p_hyperparams_trees.png", model_name = user_modelname)
+get_plot_save(plot = p_hyperparams_trees2, plotname_png = "p_hyperparams_trees2.png", model_name = user_modelname)
+get_plot_save(plot = p_hyperparams_minn, plotname_png = "p_hyperparams_minn.png", model_name = user_modelname)
+get_plot_save(plot = p_hyperparams_mtry, plotname_png = "p_hyperparams_mtry.png", model_name = user_modelname)
+get_plot_save(plot = tree_plot, plotname_png = "tree_plot.png", width = 8, height = 20, model_name = user_modelname)
 
 

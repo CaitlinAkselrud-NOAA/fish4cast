@@ -16,8 +16,8 @@ make_recipe <- function(analysis_data)
     return(x)
   }
 
-  fish_recipe <- recipe(target~ ., data = analysis_data) %>%
-    step_mutate(year=factor(time)) #%>%
+  fish_recipe <- recipe(target~ ., data = analysis_data) #%>%
+    # step_mutate(year=factor(time)) #%>% #CIA: can add this as a feature when > obsv per time step AND that time step is in both analy and assm sets
     # step_mutate_at(all_numeric(),-all_outcomes(), fn=na_foo) #UNCOMMENT HERE TO CHANGE NA -> -999
 
   return(fish_recipe)
