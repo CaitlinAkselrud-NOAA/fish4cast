@@ -10,8 +10,7 @@ get_forest <- function(mtry, ntrees, minn, splitrule, analy_data, assm_data)
     ) %>%
     parsnip::set_engine("ranger",
                         splitrule = splitrule,
-                        importance = "permutation",
-                        seed=TRUE) %>%
+                        importance = "permutation") %>%
     parsnip::fit(target ~ ., data = analy_data) #, na.action = na.exclude)
 
   pred_assm <- predict(squid_rf, new_data = assm_data) %>%

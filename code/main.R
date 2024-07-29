@@ -148,6 +148,21 @@ setup_customratio <- 0.67
 # 4 = rpd; ratio of performance to deviation  measures of consistency/correlation between observed and predicted values (and not of accuracy)
 setup_hp_select <- 1
 
+# how many times do you want to re-run the trained model to ascertain uncertainty?
+setup_uncertainty <- 100
+
+# which metric are you using for uncertainty cutoff?
+# current options:
+# 1 = rmse; root mean squared error, same units as orig data
+# 2 = mae; mean absolute error, same units as orig data
+# 3 = rsq; coeeficent of determination using correlation (not traditional SSQ method)
+# 4 = rpd; ratio of performance to deviation  measures of consistency/correlation between observed and predicted values (and not of accuracy)
+setup_uncertainty_metric <- 1
+
+# what is your cutoff for uncertainty?
+setup_uncertain_cutoff <- 2
+
+
 # * processing settings ---------------------------------------------------
 # Test mode
 # TRUE means code will run using a single computing core
@@ -449,6 +464,102 @@ dir_path <-  here::here("output", user_modelname, "tuned_model.txt")
 sink(dir_path)
 print(r_forest_all[[best_hyperparam_set]])
 sink()
+
+
+# * uncertainty check -----------------------------------------------------
+
+check_grid <- bind_cols(mtry = rep(best_mtry, times = setup_uncertainty),
+                        ntrees = rep(best_ntrees, times = setup_uncertainty),
+                        minn = rep(best_minn, times = setup_uncertainty),
+                        splitrule = rep(best_splitrule, times = setup_uncertainty))
+
+ptime_check <- system.time({
+
+  print("checking the forest for bears-- please be patient")
+  print(paste("start time: ", Sys.time()))
+  squid_forests_check <- list()
+  # parallel processing of the forests
+  for(i in 1:(train_slices))
+  { squid_forests_check[[i]] <- furrr::future_pmap(list(mtry = (check_grid$mtry), ntrees = (check_grid$ntrees),
+                                                        minn = (check_grid$minn), splitrule = (check_grid$splitrule)),
+                                                   get_forest,
+                                                   analy_data = train_baked[[i]]$baked_squid,
+                                                   assm_data =  train_baked[[i]]$baked_assessment_squid,
+                                                   .progress = TRUE)
+  }
+  # plan(sequential)
+  gc()
+  print("almost done checking for bears....")
+  print(paste("start saving time: ", Sys.time()))
+  # arrange forest results, and extract rmse
+  for(j in 1:dim(check_grid)[1])
+  {
+    if(j == 1)
+    {
+      r_forest_all_checks <- list()
+      rmse_slice_checks <- vector(length = dim(check_grid)[1]) #rmse across all slices for each check
+      mae_slice_checks <- vector(length = dim(check_grid)[1])
+      rsq_slice_checks <- vector(length = dim(check_grid)[1])
+      rpd_slice_checks <- vector(length = dim(check_grid)[1])
+
+      obsv_pred <- list()
+      obsv_pred_assm_only  <- list()
+      obsv_pred_analy_only <- list()
+    }
+    obsv_pred_assm_tmp <- NULL
+    obsv_pred_analy_tmp <- NULL
+    obsv_pred_tmp <- NULL   #re-set for each hyperparam set
+    for(i in 1:train_slices)
+    {
+      if(i ==1){r_forests <- list()}
+      r_forests[[i]] <- squid_forests_check[[i]][[j]]
+      # obsv_pred_assm_checks <- obsv_pred_assm_checks %>% bind_rows(r_forests[[i]]$assm_pred)
+      obsv_pred_assm_tmp <- obsv_pred_assm_tmp %>% bind_rows(r_forests[[i]]$assm_pred)
+      obsv_pred_analy_tmp <- obsv_pred_analy_tmp %>% bind_rows(r_forests[[i]]$analy_pred)
+      obsv_pred_tmp <- obsv_pred_tmp %>% bind_rows(obsv_pred_analy_tmp, obsv_pred_assm_tmp)
+    }
+    r_forest_all_checks[[j]] <- r_forests #note: r_forest_all_checks[[check number]][[slice]]
+    rmse_slice_checks[j] <-  yardstick::rmse_vec(truth = obsv_pred_assm_tmp$target, estimate = obsv_pred_assm_tmp$.pred)
+    mae_slice_checks[j] <- yardstick::mae_vec(truth = obsv_pred_assm_tmp$target, estimate = obsv_pred_assm_tmp$.pred)
+    rsq_slice_checks[j] <- yardstick::rsq_vec(truth = obsv_pred_assm_tmp$target, estimate = obsv_pred_assm_tmp$.pred)
+    rpd_slice_checks[j] <- yardstick::rpd_vec(truth = obsv_pred_assm_tmp$target, estimate = obsv_pred_assm_tmp$.pred)
+
+    obsv_pred_assm_only <- obsv_pred_assm_only %>% bind_rows(obsv_pred_assm_tmp)
+    obsv_pred_analy_only <- obsv_pred_analy_only %>% bind_rows(obsv_pred_analy_tmp)
+    obsv_pred <- obsv_pred %>% bind_rows(obsv_pred_tmp)
+  }
+})
+print(paste("end uncertainty time: ", Sys.time()))
+
+obsv_pred_assm_only <- obsv_pred_assm_only %>% rename(obsv_cdfg = target, pred = .pred)
+obsv_pred_analy_only <- obsv_pred_analy_only %>% rename(obsv_cdfg = target, pred = .pred)
+obsv_pred <- obsv_pred %>% rename(obsv_cdfg = target, pred = .pred)
+
+uncertainty_split <- case_when(setup_uncertainty_metric == 1 ~ max(rmse_slice_checks) - min(rmse_slice_checks),
+                               setup_uncertainty_metric == 2 ~ max(rmse_slice_checks) - min(mae_slice_checks),
+                               setup_uncertainty_metric == 3 ~ max(rmse_slice_checks) - min(rsq_slice_checks),
+                               setup_uncertainty_metric == 4 ~ max(rmse_slice_checks) - min(rpd_slice_checks))
+
+write(paste("Uncertainty split: ", uncertainty_split),
+      file = here::here("output", user_modelname,"info.txt"), append = TRUE)
+
+if(uncertainty_split > setup_uncertain_cutoff)
+{
+  write(paste("WARNING: The uncertainty split is > your assigned cutoff value"), file = here::here("output", user_modelname, "warnings.txt"), append = TRUE)
+  write(paste("uncertainty split = ", uncertainty_split), file = here::here("output", user_modelname, "warnings.txt"), append = TRUE)
+  write(paste("user assigned cutoff value = ", setup_uncertain_cutoff), file = here::here("output", user_modelname, "warnings.txt"), append = TRUE)
+  write(paste("Check that your assigned cutoff value is correct; if so, check features chosen,  feature sparseness, and model configurations; consider more hyperparameter combinations"),
+        file = here::here("output", user_modelname, "warnings.txt"), append = TRUE)
+}
+
+# CIA: set best model based on min split or min metric?
+best_check_set <- which.min(rmse_slice_checks)
+
+for(i in 1:train_slices)
+{
+  print(r_forest_all_checks[[best_check_set]][[i]]$model)
+}
+best_squid_rf <- r_forest_all_checks[[best_check_set]][[train_slices]]$model
 
 # * testing ---------------------------------------------------------------
 
