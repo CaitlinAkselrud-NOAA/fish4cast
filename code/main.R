@@ -40,26 +40,6 @@ file.create(here::here("output", user_modelname, "info.txt"), showWarnings = F)
 # any pre-specified or fixed values in the code should be set by the user
 #  in this section
 
-#set a maximum number of hyperparameter combos here if desired
-user_hparam_grid_max <- 100
-
-# set the vector of numbers of trees to test in training
-user_treevec <- c(10, 100, 500)
-
-# set the splitrule you want to use for tree construction
-user_splitrule <- c("extratrees")
-
-# uncertainty check:
-# # a vector of numbers or single value over which to re-run trained model to assess uncertainty
-user_checklen <- c(50, 100, 150)
-
-# testing data method
-# 1 = all training data together
-# 2 = k-fold training data
-# 3 = both
-user_trainmethod = 3
-
-
 # * about input data ------------------------------------------------------
 
 in_ts <- TRUE #T/F input is a time series
@@ -91,25 +71,10 @@ in_time <- in_cols[9]
 # future: spatial?
 
 # data splits:
-# # tell cross-validation how to structure k-folds
-k_init_time_train = NA # set to NA to use default values; number of data rows in first k-fold training data
-k_assess_train = NA # set to NA to use default values;
-k_cumulative_train = NA # set to NA to use default values;
-k_skip_train = NA # set to NA to use default values;
-k_lag_train = NA # set to NA to use default values;
-
-if(user_trainmethod > 1)
-{
-  k_init_time_test = NA # set to NA to use default values; number of data rows in first k-fold training data
-  k_assess_test = NA # set to NA to use default values;
-  k_cumulative_test = NA # set to NA to use default values;
-  k_skip_test = NA # set to NA to use default values;
-  k_lag_test = NA # set to NA to use default values;
-}
-
 
 # * random forest settings ------------------------------------------------
 
+# * * hyperparameters -----------------------------------------------------
 # n trees
 
 # do you want to test every hyperparam combo? (computationally intensive)
@@ -126,6 +91,22 @@ setup_newgrid <- TRUE
 setup_gridfile <- FALSE
 setup_gridfilename <- "grid.csv"
 
+#set a maximum number of hyperparameter combos here if desired
+user_hparam_grid_max <- 100
+
+# set the vector of numbers of trees to test in training
+user_treevec <- c(10, 100, 500)
+
+# set the splitrule you want to use for tree construction
+user_splitrule <- c("extratrees")
+
+# uncertainty check:
+# # a vector of numbers or single value over which to re-run trained model to assess uncertainty
+user_checklen <- c(50, 100, 150)
+
+
+# * * cross-validation structure ------------------------------------------
+
 # do you want a standard data split based on optimal splitting work by Joseph (2022) or custom split?
 # TRUE = standard split
 # FALSE = custom split
@@ -140,6 +121,28 @@ setup_customsplit <- FALSE #TRUE scenario not yet operational
 # the custom ratio represents the proportion of training data
 setup_customratio <- 0.67
 
+# # tell cross-validation how to structure k-folds
+k_init_time_train = NA # set to NA to use default values; number of data rows in first k-fold training data
+k_assess_train = NA # set to NA to use default values;
+k_cumulative_train = NA # set to NA to use default values;
+k_skip_train = NA # set to NA to use default values;
+k_lag_train = NA # set to NA to use default values;
+
+# testing data method
+# 1 = all training data together
+# 2 = k-fold training data
+# 3 = both
+user_trainmethod = 3
+
+if(user_trainmethod > 1)
+{
+  k_init_time_test = NA # set to NA to use default values; number of data rows in first k-fold training data
+  k_assess_test = NA # set to NA to use default values;
+  k_cumulative_test = NA # set to NA to use default values;
+  k_skip_test = NA # set to NA to use default values;
+  k_lag_test = NA # set to NA to use default values;
+}
+
 # what metric do you want to use to select the best hparam set?
 # current options:
 # 1 = rmse; root mean squared error, same units as orig data
@@ -147,6 +150,10 @@ setup_customratio <- 0.67
 # 3 = rsq; coeeficent of determination using correlation (not traditional SSQ method)
 # 4 = rpd; ratio of performance to deviation  measures of consistency/correlation between observed and predicted values (and not of accuracy)
 setup_hp_select <- 1
+
+
+# * * uncertainty setup  --------------------------------------------------
+
 
 # how many times do you want to re-run the trained model to ascertain uncertainty?
 setup_uncertainty <- 100
@@ -194,14 +201,20 @@ in_data %<>%  dplyr::rename(time = in_time)
 #    calc mean and CI of location (here- time point)
 
 # train/test split (regime breakpoints?) in target
+# try mgcv
 
 # non-stationarity in target
+# check: https://feasts.tidyverts.org/
 
 # ARIMA in target
+# check: https://www.rdocumentation.org/packages/forecast/versions/8.23.0
 
 # extremes detection in target
+# check: https://github.com/fate-ewi/bayesdfa/blob/main/R/find_swans.R
 
 # collinearity in features
+# effective number of predictors, adjusted for collinearity (E Ward suggestion)
+# might be straightforward for continuous values cases, but challenge for sparse data
 
 # output detected elements; default = use best settings; user can modify
 
