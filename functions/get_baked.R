@@ -48,3 +48,12 @@ get_baked <- function(kfold, splitN)
   return(list(baked_squid=baked_squid, baked_assessment_squid=baked_assessment_squid))
 
 }
+
+get_test_bake <- function(testing_data)
+{
+  squid_recipe <- make_recipe(testing_data)
+  prepped_squid<- prep(squid_recipe, data= testing_data)
+  juiced_squid<- juice(prepped_squid)
+  baked_squid <- bake(prepped_squid, new_data = testing_data)
+  return(baked_squid)
+}

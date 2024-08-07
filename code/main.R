@@ -104,7 +104,7 @@ user_splitrule <- c("extratrees")
 # # a vector of numbers or single value over which to re-run trained model to assess uncertainty
 user_checklen <- c(50, 100, 150)
 
-
+user_treecheck <- c(10, 50, seq(from = 100, to = 5000, by = 100))
 # * * cross-validation structure ------------------------------------------
 
 # do you want a standard data split based on optimal splitting work by Joseph (2022) or custom split?
@@ -132,9 +132,9 @@ k_lag_train = NA # set to NA to use default values;
 # 1 = all training data together
 # 2 = k-fold training data
 # 3 = both
-user_trainmethod = 3
+user_testmethod = 3
 
-if(user_trainmethod > 1)
+if(user_testmethod > 1)
 {
   k_init_time_test = NA # set to NA to use default values; number of data rows in first k-fold training data
   k_assess_test = NA # set to NA to use default values;
@@ -256,8 +256,8 @@ if(setup_datasplit == TRUE) # standard optimal split based on Joseph (2022)
   }
 }
 
-write_csv(training(dat_split), path = here::here("output", user_modelname, "training.csv"))
-write_csv(testing(dat_split), path = here::here("output", user_modelname, "testing.csv"))
+write_csv(training(dat_split), file = here::here("output", user_modelname, "training.csv"))
+write_csv(testing(dat_split), file = here::here("output", user_modelname, "testing.csv"))
 write(paste("Train/test splitting ratio: ", split_ratio),
       file = here::here("output", user_modelname,"info.txt"), append = TRUE)
 
@@ -282,9 +282,13 @@ for(i in 1:(train_slices))
                                 splitN=i)
 }
 
+# * * training single fit -------------------------------------------------
+
+test_simple <- get_test_bake(training(dat_split))
+
 # ** optional testing cross-validation ---------------------------------------
 
-if(user_trainmethod > 1)
+if(user_testmethod > 1)
 {
   kfold_test <- get_kfold(k_data_in = testing(dat_split),
                            k_init_time = k_init_time_test,
@@ -301,6 +305,7 @@ if(user_trainmethod > 1)
     test_baked[[i]] <- get_baked(kfold = kfold_test,
                                  splitN=i)
   }
+
 }
 
 
@@ -572,20 +577,138 @@ for(i in 1:train_slices)
 {
   print(r_forest_all_checks[[best_check_set]][[i]]$model)
 }
+# set fitted model to last fold of best check set
 best_squid_rf <- r_forest_all_checks[[best_check_set]][[train_slices]]$model
+
+
+# * trees check -----------------------------------------------------------
+
+# CIA: Goldstein et all 2011 (genetics): data sparseness problem in ecology
+
+# test your best fitting model on increasing numbers of trees; assess range
+
+ptime_trees <- system.time({
+  print("planting trees in the forest-- please be patient")
+  print(paste("start time: ", Sys.time()))
+  squid_forests_trees <- list()
+  # parallel processing of the forests
+  for(i in 1:(train_slices))
+  { squid_forests_trees[[i]] <- furrr::future_pmap(list(mtry = best_mtry, ntrees = (user_treecheck),
+                                                        minn = best_minn, splitrule = best_splitrule),
+                                                   get_forest,
+                                                   analy_data = train_baked[[i]]$baked_squid,
+                                                   assm_data =  train_baked[[i]]$baked_assessment_squid,
+                                                   .progress = TRUE)
+  }
+  # plan(sequential)
+  gc()
+  print("almost done planting trees....")
+  print(paste("start saving time: ", Sys.time()))
+  # arrange forest results, and extract rmse
+  for(j in 1:length(user_treecheck))
+  {
+    if(j == 1)
+    {
+      r_forest_alltrees <- list()
+      rmse_slice_trees <- vector(length = length(user_treecheck)) #rmse across all slices for each hyperparam combo
+    }
+    obsv_pred_assm_trees <- NULL  #re-set for each hyperparam set
+    for(i in 1:train_slices)
+    {
+      if(i ==1){r_forests <- list()}
+      r_forests[[i]] <- squid_forests_trees[[i]][[j]]
+      obsv_pred_assm_trees <- obsv_pred_assm_trees %>% bind_rows(r_forests[[i]]$assm_pred)
+    }
+    r_forest_alltrees[[j]] <- r_forests #note: r_forest_alltrees[[tree number]][[slice]]
+    rmse_slice_trees[j] <-  yardstick::rmse_vec(truth = obsv_pred_assm_tmp$target, estimate = obsv_pred_assm_tmp$.pred)
+  }
+})
+print(paste("end trees time: ", Sys.time()))
 
 # * testing ---------------------------------------------------------------
 
+
+# * * single fit ----------------------------------------------------------
+# predict with best rf fit
+
+test_pred <- as_tibble(predict(object = best_squid_rf, new_data = test_simple)) %>%
+  bind_cols(target = test_simple$target) %>%
+  rename(pred = .pred)
+
+# RESIDUALS OUT OF THE APPLIED RF MODEL TO GET RMSE
+test_results <- test_pred %>%
+  summarise(rsquared = yardstick::rsq_vec(truth = target, estimate = pred),
+            rmse = yardstick::rmse_vec(truth = target, estimate = pred))
+
+# save:
+test_single_save <- list("test_results" = test_results, "test_predictions" = test_pred,
+                              "squid_test_data" = test_simple)
+
+dir_path <-  here::here("output", user_modelname,"test_predictions_singlefit.txt")
+
+sink(dir_path)
+print(test_single_save)
+sink()
+
+# * * k-fold fit ----------------------------------------------------------
+
+# test_baked[[i]]
+# test_slices
+
+ptime_test <- system.time({
+for(i in 1:(test_slices))
+{
+  if(i == 1){squid_forests <- list()}
+  print(paste("re-tuning with time step: ", test_baked[[i]]$baked_assessment_squid$time[1]))
+  print(paste("start time: ", Sys.time()))
+  # bind the full training data set to the first fold of the testing set
+  new_tune <- bind_rows(train_baked[[train_slices]]$baked_squid,
+                        train_baked[[train_slices]]$baked_assessment_squid,
+                        test_baked[[i]]$baked_squid)
+
+  squid_forests[[i]] <- furrr::future_pmap(list(mtry = (design_set$mtry), ntrees = (design_set$trees),
+                                                minn = (design_set$min_n), splitrule = (design_set$splitrule)),
+                                           get_forest,
+                                           analy_data = new_tune,
+                                           assm_data =  test_baked[[i]]$baked_assessment_squid,
+                                           .progress = TRUE)
+}
+
+
+gc()
+# arrange forest results, and extract rmse
+print("almost done with testing analysis....")
+print(paste("start saving time: ", Sys.time()))
+
+# FIND THE BEST PARAMETER SET **FOR EACH SLICE**
+for(i in 1:test_slices)
+{
+  if(i == 1){best_rmse = vector(length = test_slices)
+  best_hyperparam_set = vector(length = test_slices)}
+  # within every slice, there is each hyperparam set
+  for(j in 1:dim(design_set)[1])
+  {
+    if(j == 1) {rmse_each = vector(length = dim(design_set)[1])}
+    rmse_each[j] = yardstick::rmse_vec(truth = squid_forests[[i]][[j]]$assm_pred$target,
+                                       estimate = squid_forests[[i]][[j]]$assm_pred$.pred)
+  }
+  best_rmse[i] <- min(rmse_each)
+  best_hyperparam_set[i] <- which.min(rmse_each)
+}
+
+# SAVE THE BEST FIT FOR EACH SLICE (lowest rmse of any hyperparam set for each set of years predicted)
+for(i in 1:test_slices)
+{
+  if(i == 1){best_ofeach_slice <- list()}
+  # save info from each slice and best set
+  best_ofeach_slice[[i]] <- squid_forests[[i]][[best_hyperparam_set[i]]]
+}
+})
 
 # * output ----------------------------------------------------------------
 
 # training output:
 # hyperparameter stuff:
-
-
-
-# variable importance:
-write_csv(var_import_slices_train, path = here::here("output", user_modelname, "train_var_import.csv"))
 
 # * * training diagnostic plots --------------------------------------------
 
@@ -666,7 +789,7 @@ tree_plot <-
 # tree_plot
 if(test_mode == TRUE) {tree_plot}
 
-# SAVE plots
+# SAVE hyperparameter plots
 
 get_plot_save(plot = p_hist_rmse, plotname_png = "p_hist_rmse.png", model_name = user_modelname)
 get_plot_save(plot = p_hist_mae, plotname_png = "p_hist_mae.png", model_name = user_modelname)
@@ -678,4 +801,20 @@ get_plot_save(plot = p_hyperparams_minn, plotname_png = "p_hyperparams_minn.png"
 get_plot_save(plot = p_hyperparams_mtry, plotname_png = "p_hyperparams_mtry.png", model_name = user_modelname)
 get_plot_save(plot = tree_plot, plotname_png = "tree_plot.png", width = 8, height = 20, model_name = user_modelname)
 
+
+# tree check with best training model:
+tree_check_plot <- ggplot()+
+  geom_line(aes(x = user_treecheck, y = rmse_slice_trees)) +
+  geom_point(aes(x = user_treecheck, y = rmse_slice_trees)) +
+  theme_classic()+
+  xlab("Number of trees")+
+  ylab("RMSE")
+
+get_plot_save(plot = tree_check_plot, plotname_png = "tree_effect.png", width = 6, height = 5, model_name = user_modelname)
+
+
+# * * variable importance -------------------------------------------------
+
+# variable importance:
+write_csv(var_import_slices_train, path = here::here("output", user_modelname, "train_var_import.csv"))
 
