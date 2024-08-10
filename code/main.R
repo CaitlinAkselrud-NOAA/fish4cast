@@ -4,6 +4,10 @@
 #' Initiation date: 2024-07-22
 #'
 
+# Notes:
+#  in_ are user specified variables for the input data
+#  setup_ are user specified TRUE/FALSE settings
+#  user_ are user specified numeric values or vectors
 
 # libraries ---------------------------------------------------------------
 library(tidyverse)
@@ -65,7 +69,7 @@ in_features <- in_cols[1:7]
 in_target <- in_cols[8]
 
 # designate which column is time (if using)
-# CIA: currently required, can add option later
+# CIA note: currently required, can add option later
 in_time <- in_cols[9]
 
 # future: spatial?
@@ -119,7 +123,7 @@ setup_customsplit <- FALSE #TRUE scenario not yet operational
 
 # a custom ratio must be > 0 and < 1; 0.60 to 0.75 is standard in the literature
 # the custom ratio represents the proportion of training data
-setup_customratio <- 0.67
+user_customratio <- 0.67
 
 # # tell cross-validation how to structure k-folds
 k_init_time_train = NA # set to NA to use default values; number of data rows in first k-fold training data
@@ -149,14 +153,14 @@ if(user_testmethod > 1)
 # 2 = mae; mean absolute error, same units as orig data
 # 3 = rsq; coeeficent of determination using correlation (not traditional SSQ method)
 # 4 = rpd; ratio of performance to deviation  measures of consistency/correlation between observed and predicted values (and not of accuracy)
-setup_hp_select <- 1
-
+user_hp_select <- 1
+# CIA: consider- MSE, MASE, MAPE, SMAPE
 
 # * * uncertainty setup  --------------------------------------------------
 
 
 # how many times do you want to re-run the trained model to ascertain uncertainty?
-setup_uncertainty <- 100
+user_uncertainty <- 100
 
 # which metric are you using for uncertainty cutoff?
 # current options:
@@ -164,11 +168,21 @@ setup_uncertainty <- 100
 # 2 = mae; mean absolute error, same units as orig data
 # 3 = rsq; coeeficent of determination using correlation (not traditional SSQ method)
 # 4 = rpd; ratio of performance to deviation  measures of consistency/correlation between observed and predicted values (and not of accuracy)
-setup_uncertainty_metric <- 1
+user_uncertainty_metric <- 1
 
 # what is your cutoff for uncertainty?
-setup_uncertain_cutoff <- 2
+user_uncertain_cutoff <- 2
 
+
+# * * model selection -----------------------------------------------------
+
+# which metric are you using for selecting the best model?
+# current options:
+# 1 = rmse; root mean squared error, same units as orig data
+# 2 = mae; mean absolute error, same units as orig data
+# 3 = rsq; coeeficent of determination using correlation (not traditional SSQ method)
+# 4 = rpd; ratio of performance to deviation  measures of consistency/correlation between observed and predicted values (and not of accuracy)
+user_selex_metric <- 1
 
 # * processing settings ---------------------------------------------------
 # Test mode
@@ -229,7 +243,7 @@ split_recommended <- NA #CIA fill in here
 
 # ** training vs testing -------------------------------------------------
 
-# CIA: currently all based around initial_time_split; future: add feature for random splits
+# future: currently all based around initial_time_split; future: add feature for random splits
 
 # updated science on splitting, Joseph 2022
 # optimal ratio is: sqrt(num_params)/(sqrt(num_params)+1)
@@ -238,7 +252,6 @@ split_recommended <- NA #CIA fill in here
 if(setup_datasplit == TRUE) # standard optimal split based on Joseph (2022)
 {
   split_ratio <- sqrt(3)/(sqrt(3)+1) #based on Joseph (2022) and 3 hparams
-  # CIA: modify with: if data is a time series, non-stationary, etc: use time_split.
   dat_split <- rsample::initial_time_split(in_data, prop = split_ratio)
 }else if(setup_datasplit == FALSE)
 {
@@ -251,7 +264,7 @@ if(setup_datasplit == TRUE) # standard optimal split based on Joseph (2022)
   }
   if(setup_customsplit == FALSE)
   {
-    split_ratio <- setup_customratio
+    split_ratio <- user_customratio
     dat_split <- rsample::initial_time_split(in_data, prop = split_ratio)
   }
 }
@@ -275,7 +288,6 @@ train_slices <- dim(kfold_train)[1]
 
 train_baked <- list()
 
-# CIA: convert this to an apply statement
 for(i in 1:(train_slices))
 {
   train_baked[[i]] <- get_baked(kfold = kfold_train,
@@ -427,7 +439,7 @@ train_time <- system.time({
     mae_slice[j] <-  yardstick::mae_vec(truth = obsv_pred_assm$target, estimate = obsv_pred_assm$.pred)
     rsq_slice[j] <-  yardstick::rsq_vec(truth = obsv_pred_assm$target, estimate = obsv_pred_assm$.pred)
     rpd_slice[j] <-  yardstick::rpd_vec(truth = obsv_pred_assm$target, estimate = obsv_pred_assm$.pred)
-    # CIA: see yardstick pacakge for more metric options: https://yardstick.tidymodels.org/articles/metric-types.html
+    # future dev: see yardstick package for more metric options: https://yardstick.tidymodels.org/articles/metric-types.html
 
   }
   print(paste("end hyperparam tuning time: ", Sys.time()))
@@ -439,15 +451,15 @@ train_time <- system.time({
 # 3 = rsq
 # 4 = rpd
 
-best_metric <- dplyr::case_when(setup_hp_select == 1 ~ min(rmse_slice),
-                                setup_hp_select == 2 ~ min(mae_slice),
-                                setup_hp_select == 3 ~ max(rsq_slice),
-                                setup_hp_select == 4 ~ min(rpd_slice))
+best_metric <- dplyr::case_when(user_hp_select == 1 ~ min(rmse_slice),
+                                user_hp_select == 2 ~ min(mae_slice),
+                                user_hp_select == 3 ~ max(rsq_slice),
+                                user_hp_select == 4 ~ min(rpd_slice))
 
-best_hyperparam_set <- dplyr::case_when(setup_hp_select == 1 ~ which.min(rmse_slice),
-                                        setup_hp_select == 2 ~ which.min(mae_slice),
-                                        setup_hp_select == 3 ~ which.max(rsq_slice),
-                                        setup_hp_select == 4 ~ which.min(rpd_slice))
+best_hyperparam_set <- dplyr::case_when(user_hp_select == 1 ~ which.min(rmse_slice),
+                                        user_hp_select == 2 ~ which.min(mae_slice),
+                                        user_hp_select == 3 ~ which.max(rsq_slice),
+                                        user_hp_select == 4 ~ which.min(rpd_slice))
 # SAVE BEST TUNED MODEL
 best_ntrees <- r_forest_all[[best_hyperparam_set]][[1]]$model$fit$num.trees
 best_mtry <- r_forest_all[[best_hyperparam_set]][[1]]$model$fit$mtry
@@ -486,10 +498,10 @@ sink()
 
 # * uncertainty check -----------------------------------------------------
 
-check_grid <- bind_cols(mtry = rep(best_mtry, times = setup_uncertainty),
-                        ntrees = rep(best_ntrees, times = setup_uncertainty),
-                        minn = rep(best_minn, times = setup_uncertainty),
-                        splitrule = rep(best_splitrule, times = setup_uncertainty))
+check_grid <- bind_cols(mtry = rep(best_mtry, times = user_uncertainty),
+                        ntrees = rep(best_ntrees, times = user_uncertainty),
+                        minn = rep(best_minn, times = user_uncertainty),
+                        splitrule = rep(best_splitrule, times = user_uncertainty))
 
 ptime_check <- system.time({
 
@@ -553,25 +565,29 @@ obsv_pred_assm_only <- obsv_pred_assm_only %>% rename(obsv_cdfg = target, pred =
 obsv_pred_analy_only <- obsv_pred_analy_only %>% rename(obsv_cdfg = target, pred = .pred)
 obsv_pred <- obsv_pred %>% rename(obsv_cdfg = target, pred = .pred)
 
-uncertainty_split <- case_when(setup_uncertainty_metric == 1 ~ max(rmse_slice_checks) - min(rmse_slice_checks),
-                               setup_uncertainty_metric == 2 ~ max(rmse_slice_checks) - min(mae_slice_checks),
-                               setup_uncertainty_metric == 3 ~ max(rmse_slice_checks) - min(rsq_slice_checks),
-                               setup_uncertainty_metric == 4 ~ max(rmse_slice_checks) - min(rpd_slice_checks))
+uncertainty_split <- case_when(user_uncertainty_metric == 1 ~ max(rmse_slice_checks) - min(rmse_slice_checks),
+                               user_uncertainty_metric == 2 ~ max(mae_slice_checks) - min(mae_slice_checks),
+                               user_uncertainty_metric == 3 ~ max(rsq_slice_checks) - min(rsq_slice_checks),
+                               user_uncertainty_metric == 4 ~ max(rpd_slice_checks) - min(rpd_slice_checks))
 
 write(paste("Uncertainty split: ", uncertainty_split),
       file = here::here("output", user_modelname,"info.txt"), append = TRUE)
 
-if(uncertainty_split > setup_uncertain_cutoff)
+if(uncertainty_split > user_uncertain_cutoff)
 {
   write(paste("WARNING: The uncertainty split is > your assigned cutoff value"), file = here::here("output", user_modelname, "warnings.txt"), append = TRUE)
   write(paste("uncertainty split = ", uncertainty_split), file = here::here("output", user_modelname, "warnings.txt"), append = TRUE)
-  write(paste("user assigned cutoff value = ", setup_uncertain_cutoff), file = here::here("output", user_modelname, "warnings.txt"), append = TRUE)
+  write(paste("user assigned cutoff value = ", user_uncertain_cutoff), file = here::here("output", user_modelname, "warnings.txt"), append = TRUE)
   write(paste("Check that your assigned cutoff value is correct; if so, check features chosen,  feature sparseness, and model configurations; consider more hyperparameter combinations"),
         file = here::here("output", user_modelname, "warnings.txt"), append = TRUE)
 }
 
-# CIA: set best model based on min split or min metric?
-best_check_set <- which.min(rmse_slice_checks)
+# set best model based on best metric
+best_check_set <-   case_when( user_selex_metric == 1 ~ which.min(rmse_slice_checks),
+                               user_selex_metric == 2 ~ which.min(mae_slice_checks),
+                               user_selex_metric == 3 ~ which.max(rsq_slice_checks),
+                               user_selex_metric == 4 ~ which.min(rpd_slice_checks))
+
 
 for(i in 1:train_slices)
 {
@@ -583,7 +599,7 @@ best_squid_rf <- r_forest_all_checks[[best_check_set]][[train_slices]]$model
 
 # * trees check -----------------------------------------------------------
 
-# CIA: Goldstein et all 2011 (genetics): data sparseness problem in ecology
+# CIA note: Goldstein et all 2011 (genetics): data sparseness problem in ecology
 
 # test your best fitting model on increasing numbers of trees; assess range
 
@@ -818,3 +834,7 @@ get_plot_save(plot = tree_check_plot, plotname_png = "tree_effect.png", width = 
 # variable importance:
 write_csv(var_import_slices_train, path = here::here("output", user_modelname, "train_var_import.csv"))
 
+
+# * * model-agnostic methods ----------------------------------------------
+
+# CIA: here: https://christophm.github.io/interpretable-ml-book/global-methods.html

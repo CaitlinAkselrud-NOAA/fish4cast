@@ -1,4 +1,18 @@
 
+#' Title
+#'
+#' @param mtry
+#' @param ntrees
+#' @param minn
+#' @param splitrule
+#' @param analy_data
+#' @param assm_data
+#'
+#' @return
+#' @export
+#'
+#' @examples
+#'
 get_forest <- function(mtry, ntrees, minn, splitrule, analy_data, assm_data)
 {
   squid_rf <-
