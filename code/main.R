@@ -19,6 +19,8 @@ library(future)
 library(dials)
 library(magrittr)
 library(ranger)
+library(hmmTMB) #for HMM models
+library(patchwork) #for plotting
 
 # functions ---------------------------------------------------------------
 
@@ -209,6 +211,22 @@ in_data %<>%  dplyr::rename(target = in_target)
 in_data %<>%  dplyr::rename(time = in_time)
 
 # * input data exploration ------------------------------------------------
+# regime shift: assume discrete process (distinct shift)
+# Zoe Rand: HMMs
+# --> consider setting HMM for splitting, then HMM for testing data to detect regime shift;
+#      add factor for regime shift with 0 or 1 values for testing predictions??
+# how to deal with NA values?
+# report out individual factors and multivariate all together reults with:
+#  time of regime shift(s) for each and all together,
+#  number of data points for each and all together after NAs removed
+#  AICc; *problem with model selection between models of varying amts data (if NAs are removed)
+# --> maybe do multivariate default with backup individual if too little data? (eg threshold = # for min number data points)
+# --> in that case, run HMM on all time points with states = 1: 0.25*time steps with AICc?
+# Then when looking at each individual ts: see where (if any) regimes shift within splitting &
+# suggest either splitting after all possible regime shifts or use standard split
+#   remember to look for regime shifts after split- and possibly add factor of 0 and 1 to model for that
+#     (esp if it's the first detected regime shift and is in testing data set)
+
 # CIA: Detmer and Eric Ward paper: GAMs as ecosystem threshold detection tool
 # - jacknife resampling
 # - if >[some fraction] jackknife iters detected a threshold,
@@ -217,7 +235,7 @@ in_data %<>%  dplyr::rename(time = in_time)
 # train/test split (regime breakpoints?) in target
 # try mgcv
 
-# non-stationarity in target
+# non-stationarity in target (assume continuous process for change through time)
 # check: https://feasts.tidyverts.org/
 
 # ARIMA in target
