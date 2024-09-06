@@ -196,6 +196,7 @@ if(test_mode == TRUE) {n_workers <- 1
 } else{n_workers <- (availableCores()-2)}
 future::plan(future::multicore, workers = n_workers)
 
+# CIA: add output for all user-specified settings for tracking projects
 
 # END OF USER SETTINGS SECTION --------------------------------------------
 # -> THE FOLLOWING CODE IS AUTOMATED.
@@ -212,20 +213,13 @@ in_data %<>%  dplyr::rename(time = in_time)
 
 # * input data exploration ------------------------------------------------
 # regime shift: assume discrete process (distinct shift)
-# Zoe Rand: HMMs
-# --> consider setting HMM for splitting, then HMM for testing data to detect regime shift;
-#      add factor for regime shift with 0 or 1 values for testing predictions??
-# how to deal with NA values?
-# report out individual factors and multivariate all together reults with:
-#  time of regime shift(s) for each and all together,
-#  number of data points for each and all together after NAs removed
-#  AICc; *problem with model selection between models of varying amts data (if NAs are removed)
-# --> maybe do multivariate default with backup individual if too little data? (eg threshold = # for min number data points)
-# --> in that case, run HMM on all time points with states = 1: 0.25*time steps with AICc?
-# Then when looking at each individual ts: see where (if any) regimes shift within splitting &
-# suggest either splitting after all possible regime shifts or use standard split
-#   remember to look for regime shifts after split- and possibly add factor of 0 and 1 to model for that
-#     (esp if it's the first detected regime shift and is in testing data set)
+# based on Zoe Rand: HMMs
+# CIA; YOU ARE HERE
+get_regimes(dat, dat_dist, n_states, n_iters = 200)
+# CIA: dat = just factors;
+# dist = dist type (eg normal) for each factor as a list;
+# n-states-- here is wher you can test multiple state settings, then later compare with AIC
+# niters = number repeats within one hmm fit test
 
 # CIA: Detmer and Eric Ward paper: GAMs as ecosystem threshold detection tool
 # - jacknife resampling
