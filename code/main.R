@@ -850,3 +850,23 @@ write_csv(var_import_slices_train, path = here::here("output", user_modelname, "
 # * * model-agnostic methods ----------------------------------------------
 
 # CIA: here: https://christophm.github.io/interpretable-ml-book/global-methods.html
+
+# PARSIMONY:
+# 1) global surrogate models, aka parsimony
+# 2) LIME (also a parsimony method)
+
+# FEATURES:
+# 3) PDP
+# 4) accumulated local effects plot
+# 5) H-stat (feature interxn)
+# 6) fxnal decomposition
+# 7) permutation feature importance (importance plots)
+# 8) ICE
+# 9) anchors
+# 10) Shapely
+# 11) SHAP
+
+# EXAMPLES/DATA:
+# 12) example-based explanations: is there a subset the provides a good example of ML results? also, analogies to illustrate results (humans think in stories)
+# 13) prototype/criticism points
+
