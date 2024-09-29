@@ -84,6 +84,12 @@ in_time <- in_cols[9]
 # future: spatial?
 
 # data splits:
+# set distribution for each feature
+all_features <- in_data %>% dplyr::select(-time, -target)
+dists_feat<-lapply(all_features, function(x){x = "norm"})
+
+# how many states to test for in regime testing (max):
+max_states_test <- 2
 
 # * random forest settings ------------------------------------------------
 
@@ -218,11 +224,37 @@ if(in_ts == TRUE){in_data <- in_data %>% arrange(in_time) }
 in_data %<>%  dplyr::rename(target = in_target)
 in_data %<>%  dplyr::rename(time = in_time)
 
+features <- test_simple[which(names(test_simple) != "target")]
+# features_notime <- features[which(names(features) != "time")]
+
 # * input data exploration ------------------------------------------------
 # regime shift: assume discrete process (distinct shift)
 # based on Zoe Rand: HMMs
 # CIA; YOU ARE HERE
-## get_regimes(dat, dat_dist, n_states, n_iters = 200)
+
+regimes_aic <- vector(length = length(2:max_states_test))
+regimes_shift <- matrix(nrow = 2:max_states_test,
+                        ncol = dim(all_features)[1])
+for(i in 2:max_states_test)
+{
+  regimes <- get_regimes(dat = all_features,
+                           dat_dist = dists_feat,
+                           n_states = i, n_iters = 200)
+  regimes_aic[i-1] <- regimes$best_aic
+  regimes_shift[i-1, ] <- regimes$best_states
+}
+
+aic_selex <- which.min(regimes_aic)
+fit_regime <- regimes_shift[aic_selex, ]
+bind_cols(in_data, regime_detect = fit_regime) %>%
+  group_by(regime_detect) %>%
+  summarise(regime_start = min(time),
+            regime_end = max(time))
+
+# shift detected 2007-2008; std recommended split btw 2013-2014
+# CIA: you are here
+
+
 # CIA: dat = just factors;
 # dist = dist type (eg normal) for each factor as a list;
 # n-states-- here is wher you can test multiple state settings, then later compare with AIC
@@ -879,7 +911,7 @@ train_final <- bind_rows(train_baked[[train_slices]]$baked_squid,
 test_pred
 
 predFunction <- function(object, newdata) predict(object, data = newdata)$predictions
-features <- test_simple[which(names(test_simple) != "target")]
+
 predictor_squid <- Predictor$new(best_squid_rf$fit,
                            data = features,
                            y = test_simple$target,
