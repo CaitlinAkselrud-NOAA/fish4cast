@@ -21,6 +21,9 @@ library(magrittr)
 library(ranger)
 library(hmmTMB) #for HMM models
 library(patchwork) #for plotting
+library(iml)
+library(glmnet)
+library(partykit)
 
 # functions ---------------------------------------------------------------
 
@@ -28,6 +31,10 @@ library(patchwork) #for plotting
 functions <- list.files(here::here("functions"))
 purrr::walk(functions, ~ source(here::here("functions", .x)))
 
+# sk_explain1 <- list.files(here::here("helpers", "scikit-explain-0.1.4",
+#                                      "skexplain", "main", "PermutationImportance"))
+# purrr::walk(functions, ~ py_run_file(here::here("helpers", "scikit-explain-0.1.4",
+                                                # "skexplain", "main", "PermutationImportance", .x)))
 
 # model name
 user_modelname <- "base_simple"
@@ -215,7 +222,7 @@ in_data %<>%  dplyr::rename(time = in_time)
 # regime shift: assume discrete process (distinct shift)
 # based on Zoe Rand: HMMs
 # CIA; YOU ARE HERE
-get_regimes(dat, dat_dist, n_states, n_iters = 200)
+## get_regimes(dat, dat_dist, n_states, n_iters = 200)
 # CIA: dat = just factors;
 # dist = dist type (eg normal) for each factor as a list;
 # n-states-- here is wher you can test multiple state settings, then later compare with AIC
@@ -229,18 +236,28 @@ get_regimes(dat, dat_dist, n_states, n_iters = 200)
 # train/test split (regime breakpoints?) in target
 # try mgcv
 
+
+
 # non-stationarity in target (assume continuous process for change through time)
 # check: https://feasts.tidyverts.org/
+
+
 
 # ARIMA in target
 # check: https://www.rdocumentation.org/packages/forecast/versions/8.23.0
 
+
+
 # extremes detection in target
 # check: https://github.com/fate-ewi/bayesdfa/blob/main/R/find_swans.R
+
+
 
 # collinearity in features
 # effective number of predictors, adjusted for collinearity (E Ward suggestion)
 # might be straightforward for continuous values cases, but challenge for sparse data
+
+
 
 # output detected elements; default = use best settings; user can modify
 
@@ -308,7 +325,7 @@ for(i in 1:(train_slices))
 
 # * * training single fit -------------------------------------------------
 
-test_simple <- get_test_bake(training(dat_split))
+test_simple <- get_test_bake(testing(dat_split))
 
 # ** optional testing cross-validation ---------------------------------------
 
@@ -851,22 +868,48 @@ write_csv(var_import_slices_train, path = here::here("output", user_modelname, "
 
 # CIA: here: https://christophm.github.io/interpretable-ml-book/global-methods.html
 
+# fitted model
+best_squid_rf
+# test data:
+test_simple
+# train data:
+train_final <- bind_rows(train_baked[[train_slices]]$baked_squid,
+                         train_baked[[train_slices]]$baked_assessment_squid)
+# predicted values
+test_pred
+
+predFunction <- function(object, newdata) predict(object, data = newdata)$predictions
+features <- test_simple[which(names(test_simple) != "target")]
+predictor_squid <- Predictor$new(best_squid_rf$fit,
+                           data = features,
+                           y = test_simple$target,
+                           predict.function = predFunction)
+predictor_squid$model$predictions
+
+
 # PARSIMONY:
-# 1) global surrogate models, aka parsimony
-# 2) LIME (also a parsimony method)
+get_surrogate_models(iml_obj = predictor_squid,
+                     full_data = in_data,
+                     train_data = train_final,
+                     test_data = test_simple,
+                     test_features = features)
 
 # FEATURES:
-# 3) PDP
+# 3) Partial dependence plots (PDP)
 # 4) accumulated local effects plot
 # 5) H-stat (feature interxn)
 # 6) fxnal decomposition
 # 7) permutation feature importance (importance plots)
+# CIA: adapt for type of metric used: rmse, mse, mae, etc
+imp <- FeatureImp$new(predictor_squid, loss = "mae")
 # 8) ICE
 # 9) anchors
 # 10) Shapely
-# 11) SHAP
+# 11) SHAP: In R, there are the shapper and fastshap packages. SHAP is also included in the R xgboost package.
 
 # EXAMPLES/DATA:
-# 12) example-based explanations: is there a subset the provides a good example of ML results? also, analogies to illustrate results (humans think in stories)
+# 12) example-based explanations: is there a subset that provides a good example
+#     of ML results? also, analogies to illustrate results
+#     (humans think in stories)
 # 13) prototype/criticism points
 
