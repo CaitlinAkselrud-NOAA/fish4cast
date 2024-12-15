@@ -25,9 +25,9 @@ get_regimes <- function(dat, dat_dist, n_states, n_iters = 200)
     init_list<-list()
     # create initial values for each data column using kmeans clustering for n regimes
     inits <- matrix(nrow = n_states, ncol = dim(dat)[2])
-    for(i in 1:dim(dat)[2])
+    for(k in 1:dim(dat)[2])
     {
-      inits[,i] <- kmeans(na.omit(dat[,i]), n_states)$centers
+      inits[,k] <- kmeans(na.omit(dat[,k]), n_states)$centers
       # CIA: this occurs when you have, eg two regimes (bimodal) and >2 states
       # Error in kmeans(na.omit(dat[, i]), n_states) :
       # more cluster centers than distinct data points.

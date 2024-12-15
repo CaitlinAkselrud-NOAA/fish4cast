@@ -81,6 +81,10 @@ in_target <- in_cols[8]
 # CIA note: currently required, can add option later
 in_time <- in_cols[9]
 
+# need consistent naming of target and time vars
+in_data %<>%  dplyr::rename(target = base_simple)
+in_data %<>%  dplyr::rename(time = sim_year)
+
 # future: spatial?
 
 # data splits:
@@ -90,6 +94,7 @@ dists_feat<-lapply(all_features, function(x){x = "norm"})
 
 # how many states to test for in regime testing (max):
 max_states_test <- 2
+# CIA: currently error in clusters when >2 (test and add tryCatch to return NA when fails)
 
 # * random forest settings ------------------------------------------------
 
@@ -129,12 +134,12 @@ user_treecheck <- c(10, 50, seq(from = 100, to = 5000, by = 100))
 # do you want a standard data split based on optimal splitting work by Joseph (2022) or custom split?
 # TRUE = standard split
 # FALSE = custom split
-setup_datasplit <- TRUE
+setup_datasplit <- FALSE
 
 # if you have a custom split, is it based on data results or user setting?
 # TRUE = based on automated data results
 # FALSE = user specified ratio
-setup_customsplit <- FALSE #TRUE scenario not yet operational
+setup_customsplit <- TRUE
 
 # a custom ratio must be > 0 and < 1; 0.60 to 0.75 is standard in the literature
 # the custom ratio represents the proportion of training data
@@ -182,7 +187,7 @@ user_uncertainty <- 100
 # 1 = rmse; root mean squared error, same units as orig data
 # 2 = mae; mean absolute error, same units as orig data
 # 3 = rsq; coeeficent of determination using correlation (not traditional SSQ method)
-# 4 = rpd; ratio of performance to deviation  measures of consistency/correlation between observed and predicted values (and not of accuracy)
+# 4 = rpd; ratio of performance to deviation measures of consistency/correlation between observed and predicted values (and not of accuracy)
 user_uncertainty_metric <- 1
 
 # what is your cutoff for uncertainty?
@@ -218,25 +223,25 @@ future::plan(future::multicore, workers = n_workers)
 
 # if your data is a time series, make sure it is arranged chronologically
 #   this is important later when you do your training/testing splits
-if(in_ts == TRUE){in_data <- in_data %>% arrange(in_time) }
+if(in_ts == TRUE){in_data <- in_data %>% arrange(time) }
 
-# need consistent naming of target and time vars
-in_data %<>%  dplyr::rename(target = in_target)
-in_data %<>%  dplyr::rename(time = in_time)
-
-features <- test_simple[which(names(test_simple) != "target")]
+features <- in_data[which(names(in_data) != "target")]
+# features <- test_simple[which(names(test_simple) != "target")]
 # features_notime <- features[which(names(features) != "time")]
 
 # * input data exploration ------------------------------------------------
 # regime shift: assume discrete process (distinct shift)
 # based on Zoe Rand: HMMs
-# CIA; YOU ARE HERE
 
 regimes_aic <- vector(length = length(2:max_states_test))
 regimes_shift <- matrix(nrow = 2:max_states_test,
                         ncol = dim(all_features)[1])
 for(i in 2:max_states_test)
 {
+  # dat = just feature data;
+  # dist = dist type (eg normal) for each feature as a list;
+  # n-states-- here is where you can test multiple state settings, then later compare with AIC
+  # niters = number repeats within one hmm fit test
   regimes <- get_regimes(dat = all_features,
                            dat_dist = dists_feat,
                            n_states = i, n_iters = 200)
@@ -246,19 +251,14 @@ for(i in 2:max_states_test)
 
 aic_selex <- which.min(regimes_aic)
 fit_regime <- regimes_shift[aic_selex, ]
-bind_cols(in_data, regime_detect = fit_regime) %>%
+regime_periods <- bind_cols(in_data, regime_detect = fit_regime) %>%
   group_by(regime_detect) %>%
   summarise(regime_start = min(time),
             regime_end = max(time))
 
+reg_change <- which(diff(fit_regime) != 0) + 1
+
 # shift detected 2007-2008; std recommended split btw 2013-2014
-# CIA: you are here
-
-
-# CIA: dat = just factors;
-# dist = dist type (eg normal) for each factor as a list;
-# n-states-- here is wher you can test multiple state settings, then later compare with AIC
-# niters = number repeats within one hmm fit test
 
 # CIA: Detmer and Eric Ward paper: GAMs as ecosystem threshold detection tool
 # - jacknife resampling
@@ -294,7 +294,7 @@ bind_cols(in_data, regime_detect = fit_regime) %>%
 # output detected elements; default = use best settings; user can modify
 
 # based on results, train/test split recommended
-split_recommended <- NA #CIA fill in here
+# split_recommended <- NA #CIA fill in here
 
 # CIA: notes- ideally, train/test is approx 60-75% data, AND not on a regime shift
 
@@ -310,17 +310,58 @@ split_recommended <- NA #CIA fill in here
 # optimal ratio is: sqrt(num_params)/(sqrt(num_params)+1)
 # this implementation uses 3 hyperparameters- n_trees, min_n, mtry
 
+split_ratio <- sqrt(3)/(sqrt(3)+1) #based on Joseph (2022) and 3 hparams
+
 if(setup_datasplit == TRUE) # standard optimal split based on Joseph (2022)
 {
-  split_ratio <- sqrt(3)/(sqrt(3)+1) #based on Joseph (2022) and 3 hparams
   dat_split <- rsample::initial_time_split(in_data, prop = split_ratio)
 }else if(setup_datasplit == FALSE)
 {
   if(setup_customsplit == TRUE) # use data exploration results to set split
   {
-    # if there is a regime, etc: split based on data recommendation
-    # CIA; this feature is not yet operational; need to setup data exploration above
-    split_ratio <- split_recommended
+    split_check <- round(split_ratio*dim(in_data)[1], 0)
+    if(any(split_check == reg_change)) #if you ARE splitting on a regime change
+    {
+      split_range <- seq(from = round(0.6*dim(in_data)[1],0),
+                            to = round(0.75*dim(in_data)[1],0),
+                            by = 1)
+      split_update <- split_range[!split_range %in% split_check]
+      if(any(reg_change %in% split_update))
+      {
+        # produce a warning that multiple regimes are detected within the splitting range
+        # recommend custom user input after data analysis
+        split_fix <- split_range[!split_range %in% reg_change]
+        new_split <- split_fix[round(length(split_fix)/2, 0)]
+        new_split_ratio <- new_split/dim(in_data)[1]
+        dat_split <- rsample::initial_time_split(in_data, prop = new_split_ratio)
+        write(paste("WARNING: multiple regime shifts detected in the train/test split;",
+                    "RECOMMEND user reviews data, regimes, and number of regime states detected",
+                    "regimes detected in time(s):",in_data$time[reg_change]),
+              file = here::here("output", user_modelname,"info.txt"), append = TRUE)
+        write(paste("Optimal split range is between times:",
+                    min(in_data$time[split_range]), max(in_data$time[split_range])),
+              file = here::here("output", user_modelname,"info.txt"), append = TRUE)
+        write(paste("Current train/test split set to", in_data$time[new_split]),
+              file = here::here("output", user_modelname,"info.txt"), append = TRUE)
+
+      }else { #set the split halfway between the regime shift and upper bound of std splitting
+        split_fix <- (reg_change+1):max(split_range)
+        new_split <- split_fix[round(length(split_fix)/2, 0)]
+        new_split_ratio <- new_split/dim(in_data)[1]
+        dat_split <- rsample::initial_time_split(in_data, prop = new_split_ratio)
+        write(paste("ATTENTION: a regime shift was detected in the train/test split;",
+                    "regimes detected in time:",in_data$time[reg_change]),
+              file = here::here("output", user_modelname,"info.txt"), append = TRUE)
+        write(paste("Optimal split range is between times:",
+                    min(in_data$time[split_range]), max(in_data$time[split_range])),
+              file = here::here("output", user_modelname,"info.txt"), append = TRUE)
+        write(paste("Current train/test split set to", in_data$time[new_split]),
+              file = here::here("output", user_modelname,"info.txt"), append = TRUE)
+      }
+
+    }else { #if not, then use std. split
+      dat_split <- rsample::initial_time_split(in_data, prop = split_ratio)}
+    # split_ratio <- split_recommended
     dat_split <- rsample::initial_time_split(in_data, prop = split_ratio)
   }
   if(setup_customsplit == FALSE)
@@ -428,7 +469,7 @@ if(setup_newgrid == TRUE) #create a new grid
   }
   if(setup_hgrid == FALSE) # max size design set
   {
-    design_set <- grid_max_entropy(tune_grid, size = user_hparam_grid_max) %>%
+    design_set <- dials::grid_space_filling(tune_grid, size = user_hparam_grid_max) %>%
       expand_grid(trees = user_treevec) %>%
       expand_grid(splitrule = user_splitrule)
     write_csv(design_set, path = here("input", paste0("grid.csv")))
