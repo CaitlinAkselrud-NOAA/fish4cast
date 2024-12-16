@@ -208,7 +208,7 @@ user_selex_metric <- 1
 # Test mode
 # TRUE means code will run using a single computing core
 # FALSE means the code will run in parallel using (total cores available - 2)
-test_mode <- TRUE
+test_mode <- FALSE
 # this is for the parallelization of the design set, tree check, and final check
 if(test_mode == TRUE) {n_workers <- 1
 } else{n_workers <- (availableCores()-2)}
@@ -691,10 +691,10 @@ best_check_set <-   case_when( user_selex_metric == 1 ~ which.min(rmse_slice_che
                                user_selex_metric == 4 ~ which.min(rpd_slice_checks))
 
 
-for(i in 1:train_slices)
-{
-  print(r_forest_all_checks[[best_check_set]][[i]]$model)
-}
+# for(i in 1:train_slices)
+# {
+#   print(r_forest_all_checks[[best_check_set]][[i]]$model)
+# }
 # set fitted model to last fold of best check set
 best_squid_rf <- r_forest_all_checks[[best_check_set]][[train_slices]]$model
 
@@ -772,7 +772,7 @@ sink()
 
 # test_baked[[i]]
 # test_slices
-
+options(future.rng.onMisuse="ignore")
 ptime_test <- system.time({
 for(i in 1:(test_slices))
 {
@@ -940,6 +940,8 @@ write_csv(var_import_slices_train, path = here::here("output", user_modelname, "
 # * * model-agnostic methods ----------------------------------------------
 
 # CIA: here: https://christophm.github.io/interpretable-ml-book/global-methods.html
+#   "Global methods describe how features affect the prediction on average.
+#   In contrast, local methods aim to explain individual predictions." (Molnar, IML book)
 
 # fitted model
 best_squid_rf
@@ -950,22 +952,16 @@ train_final <- bind_rows(train_baked[[train_slices]]$baked_squid,
                          train_baked[[train_slices]]$baked_assessment_squid)
 # predicted values
 test_pred
+test_features <- test_simple %>% dplyr::select(-time, -target)
 
 predFunction <- function(object, newdata) predict(object, data = newdata)$predictions
 
-predictor_squid <- Predictor$new(best_squid_rf$fit,
-                           data = features,
-                           y = test_simple$target,
-                           predict.function = predFunction)
-predictor_squid$model$predictions
+predictor_squid <- Predictor$new(best_squid_rf$fit, #fitted model
+                           data = test_features, #predictors
+                           y = test_simple$target, #target
+                           predict.function = predFunction) #prediction fxn
 
-
-# PARSIMONY:
-get_surrogate_models(iml_obj = predictor_squid,
-                     full_data = in_data,
-                     train_data = train_final,
-                     test_data = test_simple,
-                     test_features = features)
+# SURROGATE MODELS (aka parsimony)
 
 # FEATURES:
 # 3) Partial dependence plots (PDP)
