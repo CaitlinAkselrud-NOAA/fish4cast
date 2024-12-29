@@ -208,7 +208,7 @@ user_selex_metric <- 1
 # Test mode
 # TRUE means code will run using a single computing core
 # FALSE means the code will run in parallel using (total cores available - 2)
-test_mode <- FALSE
+test_mode <- TRUE
 # this is for the parallelization of the design set, tree check, and final check
 if(test_mode == TRUE) {n_workers <- 1
 } else{n_workers <- (availableCores()-2)}
@@ -952,14 +952,29 @@ train_final <- bind_rows(train_baked[[train_slices]]$baked_squid,
                          train_baked[[train_slices]]$baked_assessment_squid)
 # predicted values
 test_pred
-test_features <- test_simple %>% dplyr::select(-time, -target)
+# features
+test_features <- test_simple[which(names(test_simple) != "target")]
 
-predFunction <- function(object, newdata) predict(object, data = newdata)$predictions
+rng <- ranger(target ~ ., data = in_data,
+              num.trees = best_squid_rf$fit$num.trees,
+              mtry = best_squid_rf$fit$mtry,
+              min.node.size = best_squid_rf$fit$min.node.size,
+              importance = "permutation",
+              splitrule = best_squid_rf$fit$splitrule)
 
-predictor_squid <- Predictor$new(best_squid_rf$fit, #fitted model
-                           data = test_features, #predictors
-                           y = test_simple$target, #target
-                           predict.function = predFunction) #prediction fxn
+X <- test_simple[which(names(test_simple) != "target")]
+predictor <- Predictor$new(model = rng, data = X,
+                           y = as.data.frame(test_simple$target),
+                           predict.fun = pfun)
+
+imp <- FeatureImp$new(predictor, loss = "mae")
+imp <- FeatureImp$new(predictor, loss = "rmse")
+imp <- FeatureImp$new(predictor, loss = "mse")
+plot(imp)
+
+
+# CIA: also try scikit packages (maybe isntead of iml?)
+# https://www.johannesbgruber.eu/post/2022-03-29-scikit-learn-models-in-r-with-reticulate/#fnref3
 
 # SURROGATE MODELS (aka parsimony)
 
