@@ -37,7 +37,8 @@ purrr::walk(functions, ~ source(here::here("functions", .x)))
                                                 # "skexplain", "main", "PermutationImportance", .x)))
 
 # model name
-user_modelname <- "base_simple"
+# user_modelname <- "base_simple"
+user_modelname <- "annual_largeVessels"
 
 dir.create(here::here("input"), showWarnings = F)
 dir.create(here::here("output"), showWarnings = F)
@@ -58,7 +59,9 @@ file.create(here::here("output", user_modelname, "info.txt"), showWarnings = F)
 in_ts <- TRUE #T/F input is a time series
 
 # input file to use
-in_filename <- "sim_input_data_base_simple2024-07-20.csv"
+in_filename <- "covMatrix_LargeVessels_AnnualPredictors_AnnualCPUE.csv"
+# in_filename <- "covMatrix_MediumVessels_AnnualPredictors_AnnualCPUE.csv"
+# in_filename <- "covMatrix_SmallVessels_AnnualPredictors_AnnualCPUE.csv"
 
 # read in input file
 in_data <- read_csv(here::here("input", in_filename)) %>%
@@ -72,18 +75,26 @@ write(paste("Cleaned input column names read in as: ", in_cols),
       file = here::here("output", user_modelname,"info.txt"), append = TRUE)
 
 # designate which input columns are features
-in_features <- in_cols[1:7]
+# in_features <- in_cols[1:7] #simple example
+in_features <- in_cols[6:15]
 
 # designate which input column is the target
-in_target <- in_cols[8]
+# in_target <- in_cols[8] #simple example
+in_target <- in_cols[5]
 
 # designate which column is time (if using)
 # CIA note: currently required, can add option later
-in_time <- in_cols[9]
+# in_time <- in_cols[9] #simple example
+in_time <- in_cols[1]
 
 # need consistent naming of target and time vars
-in_data %<>%  dplyr::rename(target = base_simple)
-in_data %<>%  dplyr::rename(time = sim_year)
+# in_data %<>%  dplyr::rename(target = base_simple) #simple example
+# in_data %<>%  dplyr::rename(time = sim_year) #simple example
+in_data %<>%  dplyr::rename(target = cpue)
+in_data %<>%  dplyr::rename(time = yr)
+
+# additional data cleaning
+in_data %<>% dplyr::select(-size_class, -total, -days_fished)
 
 # future: spatial?
 
@@ -104,7 +115,7 @@ max_states_test <- 2
 # do you want to test every hyperparam combo? (computationally intensive)
 # TRUE means test every combo
 # FALSE mean test a max number of combos; default = 100.
-setup_hgrid <- FALSE
+setup_hgrid <- TRUE
 
 # if you are setting a max number of combinations, you can generate your grid once and pull it in
 # TRUE means generate new hyparparmeter grid
@@ -119,14 +130,16 @@ setup_gridfilename <- "grid.csv"
 user_hparam_grid_max <- 100
 
 # set the vector of numbers of trees to test in training
-user_treevec <- c(10, 100, 500)
+# user_treevec <- c(10, 100, 500) #simple example
+user_treevec <- c(10, 50, seq(from = 100, to = 500, by = 100))
 
 # set the splitrule you want to use for tree construction
 user_splitrule <- c("extratrees")
 
 # uncertainty check:
 # # a vector of numbers or single value over which to re-run trained model to assess uncertainty
-user_checklen <- c(50, 100, 150)
+# user_checklen <- c(50, 100, 150) #simple example
+user_checklen <- c(50, 100, 200, 400)
 
 user_treecheck <- c(10, 50, seq(from = 100, to = 5000, by = 100))
 # * * cross-validation structure ------------------------------------------
@@ -146,11 +159,11 @@ setup_customsplit <- TRUE
 user_customratio <- 0.67
 
 # # tell cross-validation how to structure k-folds
-k_init_time_train = NA # set to NA to use default values; number of data rows in first k-fold training data
-k_assess_train = NA # set to NA to use default values;
-k_cumulative_train = NA # set to NA to use default values;
-k_skip_train = NA # set to NA to use default values;
-k_lag_train = NA # set to NA to use default values;
+k_init_time_train = NA # set to NA to use default values; number of data rows in first k-fold training data; default setting = 1/3 training data
+k_assess_train = NA # set to NA to use default values; number of samples for each assessment resample; default = 1
+k_cumulative_train = NA # set to NA to use default values; continue to build years in each subsequent step; default = T
+k_skip_train = NA # set to NA to use default values; don't skip any resamples (thins thins data); default = 0
+k_lag_train = NA # set to NA to use default values; lag btw assessment and analysis sets...); default = 0
 
 # testing data method
 # 1 = all training data together
@@ -180,7 +193,8 @@ user_hp_select <- 1
 
 
 # how many times do you want to re-run the trained model to ascertain uncertainty?
-user_uncertainty <- 100
+# user_uncertainty <- 100 #simple example
+user_uncertainty <- 500
 
 # which metric are you using for uncertainty cutoff?
 # current options:
@@ -191,7 +205,8 @@ user_uncertainty <- 100
 user_uncertainty_metric <- 1
 
 # what is your cutoff for uncertainty?
-user_uncertain_cutoff <- 2
+# user_uncertain_cutoff <- 2 #simple example
+user_uncertain_cutoff <- round(0.05*min(in_data$target),0) #within 5% of the lowest fished value
 
 
 # * * model selection -----------------------------------------------------
@@ -208,7 +223,7 @@ user_selex_metric <- 1
 # Test mode
 # TRUE means code will run using a single computing core
 # FALSE means the code will run in parallel using (total cores available - 2)
-test_mode <- TRUE
+test_mode <- FALSE
 # this is for the parallelization of the design set, tree check, and final check
 if(test_mode == TRUE) {n_workers <- 1
 } else{n_workers <- (availableCores()-2)}
@@ -234,7 +249,7 @@ features <- in_data[which(names(in_data) != "target")]
 # based on Zoe Rand: HMMs
 
 regimes_aic <- vector(length = length(2:max_states_test))
-regimes_shift <- matrix(nrow = 2:max_states_test,
+regimes_shift <- matrix(nrow = length(2:max_states_test),
                         ncol = dim(all_features)[1])
 for(i in 2:max_states_test)
 {
@@ -245,11 +260,13 @@ for(i in 2:max_states_test)
   regimes <- get_regimes(dat = all_features,
                            dat_dist = dists_feat,
                            n_states = i, n_iters = 200)
+  # get_regimes already does model selection for the best fit given a specific n_state
   regimes_aic[i-1] <- regimes$best_aic
   regimes_shift[i-1, ] <- regimes$best_states
 }
 
-aic_selex <- which.min(regimes_aic)
+# this is model selection for the best number of states, if you are testing for more than one state (e.g. 2-5 states possible)
+aic_selex <- which.min(regimes_aic) # what is the best fit number of regimes, if testing for more than one
 fit_regime <- regimes_shift[aic_selex, ]
 regime_periods <- bind_cols(in_data, regime_detect = fit_regime) %>%
   group_by(regime_detect) %>%
@@ -289,7 +306,8 @@ reg_change <- which(diff(fit_regime) != 0) + 1
 # effective number of predictors, adjusted for collinearity (E Ward suggestion)
 # might be straightforward for continuous values cases, but challenge for sparse data
 
-
+# Variance Inflation Factor (VIF) is a statistical measure used in regression analysis to quantify the severity of multicollinearity, or the correlation between independent variables, and its impact on the variance of estimated regression coefficients
+# https://cran.r-project.org/web/packages/car/car.pdf
 
 # output detected elements; default = use best settings; user can modify
 
@@ -472,8 +490,8 @@ if(setup_newgrid == TRUE) #create a new grid
     design_set <- dials::grid_space_filling(tune_grid, size = user_hparam_grid_max) %>%
       expand_grid(trees = user_treevec) %>%
       expand_grid(splitrule = user_splitrule)
-    write_csv(design_set, path = here("input", paste0("grid.csv")))
-    write_csv(design_set, path = here("input", paste0("grid", Sys.Date(),".csv")))
+    write_csv(design_set, file = here("input", paste0("grid.csv")))
+    write_csv(design_set, file = here("input", paste0("grid", Sys.Date(),".csv")))
   }
 
 }else if(setup_newgrid == FALSE) #import a grid
@@ -758,6 +776,9 @@ test_results <- test_pred %>%
   summarise(rsquared = yardstick::rsq_vec(truth = target, estimate = pred),
             rmse = yardstick::rmse_vec(truth = target, estimate = pred))
 
+test_info_simple <- bind_cols(time = test_simple$time, test_pred) %>%
+  mutate(diff = target-pred)
+
 # save:
 test_single_save <- list("test_results" = test_results, "test_predictions" = test_pred,
                               "squid_test_data" = test_simple)
@@ -799,6 +820,7 @@ print("almost done with testing analysis....")
 print(paste("start saving time: ", Sys.time()))
 
 # FIND THE BEST PARAMETER SET **FOR EACH SLICE**
+results <- NULL
 for(i in 1:test_slices)
 {
   if(i == 1){best_rmse = vector(length = test_slices)
@@ -812,16 +834,32 @@ for(i in 1:test_slices)
   }
   best_rmse[i] <- min(rmse_each)
   best_hyperparam_set[i] <- which.min(rmse_each)
+  result_each <- bind_rows(squid_forests[[i]][[best_hyperparam_set[i]]]$analy_pred,
+                           squid_forests[[i]][[best_hyperparam_set[i]]]$assm_pred) %>%
+    mutate(slice = i)
+  results <- bind_rows(results, result_each)
+
 }
 
 # SAVE THE BEST FIT FOR EACH SLICE (lowest rmse of any hyperparam set for each set of years predicted)
+best_hparams_slice <- NULL
 for(i in 1:test_slices)
 {
   if(i == 1){best_ofeach_slice <- list()}
   # save info from each slice and best set
   best_ofeach_slice[[i]] <- squid_forests[[i]][[best_hyperparam_set[i]]]
+  best_hparams_slice <- bind_rows(best_hparams_slice, c(ntrees = squid_forests[[i]][[best_hyperparam_set[i]]]$model$fit$num.trees,
+                                      minn = squid_forests[[i]][[best_hyperparam_set[i]]]$model$fit$min.node.size,
+                                      mtry = squid_forests[[i]][[best_hyperparam_set[i]]]$model$fit$mtry,
+                                      rmse = best_rmse[i],
+                                      slice = i))
 }
 })
+
+write_csv(best_hparams_slice, path = here::here("output", user_modelname,"test_predictions_slice_hparms.csv"))
+write_csv(results, path = here::here("output", user_modelname,"test_predictions_slice_all.csv"))
+
+
 
 # * output ----------------------------------------------------------------
 
@@ -962,19 +1000,23 @@ rng <- ranger(target ~ ., data = in_data,
               importance = "permutation",
               splitrule = best_squid_rf$fit$splitrule)
 
-X <- test_simple[which(names(test_simple) != "target")]
-predictor <- Predictor$new(model = rng, data = X,
-                           y = as.data.frame(test_simple$target),
+in_data <- test_simple[which(names(test_simple) != "target")]
+pfun <- function(object, newdata) predict(object, data = newdata)$predictions
+predictor <- Predictor$new(model = rng, data = in_data,
+                           y = as.data.frame(test_simple$target %>% as.data.frame() %>% rename(target = '.')),
                            predict.fun = pfun)
 
-imp <- FeatureImp$new(predictor, loss = "mae")
-imp <- FeatureImp$new(predictor, loss = "rmse")
-imp <- FeatureImp$new(predictor, loss = "mse")
-plot(imp)
+imp_mae <- FeatureImp$new(predictor, loss = "mae")
+imp_mse <- FeatureImp$new(predictor, loss = "mse")
 
+imp_rmse <- FeatureImp$new(predictor, loss = "rmse")
+p_imp_rmse <- plot(imp_rmse)
+get_plot_save(plot = p_imp_rmse, plotname_png = "p_FeatureImp_rmse.png", model_name = user_modelname)
 
 # CIA: also try scikit packages (maybe isntead of iml?)
 # https://www.johannesbgruber.eu/post/2022-03-29-scikit-learn-models-in-r-with-reticulate/#fnref3
+# CIA; maybe follow up chat with Monte Flora for asst. once set up to use in R
+
 
 # SURROGATE MODELS (aka parsimony)
 
@@ -985,7 +1027,6 @@ plot(imp)
 # 6) fxnal decomposition
 # 7) permutation feature importance (importance plots)
 # CIA: adapt for type of metric used: rmse, mse, mae, etc
-imp <- FeatureImp$new(predictor_squid, loss = "mae")
 # 8) ICE
 # 9) anchors
 # 10) Shapely

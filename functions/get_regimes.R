@@ -18,7 +18,7 @@ get_regimes <- function(dat, dat_dist, n_states, n_iters = 200)
   best_aic <- 1.0e10
   best_model<-NULL
 
-  for(i in n_iters)
+  for(i in 1:n_iters)
   {
 
     #set up initial values
