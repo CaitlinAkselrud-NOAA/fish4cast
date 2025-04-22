@@ -25,11 +25,18 @@ library(iml)
 library(glmnet)
 library(partykit)
 
+# required for functions (add to DESCRIPTION dependencies; then run devtools::document to add to NAMESPACE file)
+
+# required for this script
+
+# load functions
+devtools::load_all() #load package functions fish4cast; development
+
 # functions ---------------------------------------------------------------
 
 # read in functions from the 'functions' folder
-functions <- list.files(here::here("functions"))
-purrr::walk(functions, ~ source(here::here("functions", .x)))
+functions <- list.files(here::here("R"))
+purrr::walk(functions, ~ source(here::here("R", .x)))
 
 # sk_explain1 <- list.files(here::here("helpers", "scikit-explain-0.1.4",
 #                                      "skexplain", "main", "PermutationImportance"))
