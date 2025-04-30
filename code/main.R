@@ -38,7 +38,27 @@ purrr::walk(functions, ~ source(here::here("functions", .x)))
 
 # model name
 # user_modelname <- "base_simple"
-user_modelname <- "annual_largeVessels"
+# user_modelname <- "annual_largeVessels"
+
+# input file to use
+# in_filename <- "covMatrix_LargeVessels_AnnualPredictors_AnnualCPUE_Apr2025.csv"
+# user_modelname <- "annual_largeVessels"
+
+# in_filename <- "covMatrix_MediumVessels_AnnualPredictors_AnnualCPUE_Apr2025.csv"
+# user_modelname <- "annual_mediumVessels"
+
+# in_filename <- "covMatrix_SmallVessels_AnnualPredictors_AnnualCPUE_Apr2025.csv"
+# user_modelname <- "annual_smallVessels"
+
+# monthly
+in_filename <- "covMatrix_LargeVessels_MonthlyPredictors_MonthlyCPUE_Apr2025.csv"
+user_modelname <- "monthly_largeVessels"
+
+in_filename <- "covMatrix_MediumVessels_MonthlyPredictors_MonthlyCPUE_Apr2025.csv"
+user_modelname <- "monthly_mediumVessels"
+
+in_filename <- "covMatrix_SmallVessels_MonthlyPredictors_MonthlyCPUE_Apr2025.csv"
+user_modelname <- "monthly_smallVessels"
 
 dir.create(here::here("input"), showWarnings = F)
 dir.create(here::here("output"), showWarnings = F)
@@ -58,14 +78,16 @@ file.create(here::here("output", user_modelname, "info.txt"), showWarnings = F)
 
 in_ts <- TRUE #T/F input is a time series
 
-# input file to use
-in_filename <- "covMatrix_LargeVessels_AnnualPredictors_AnnualCPUE.csv"
-# in_filename <- "covMatrix_MediumVessels_AnnualPredictors_AnnualCPUE.csv"
-# in_filename <- "covMatrix_SmallVessels_AnnualPredictors_AnnualCPUE.csv"
+#
 
 # read in input file
 in_data <- read_csv(here::here("input", in_filename)) %>%
   janitor::clean_names()
+
+# monthly cleaning:
+in_data %<>% mutate(month = mo/12,
+       yr = time +month) %>%
+  rename(year = time)
 
 # get column names
 in_cols <- colnames(in_data)
@@ -76,16 +98,19 @@ write(paste("Cleaned input column names read in as: ", in_cols),
 
 # designate which input columns are features
 # in_features <- in_cols[1:7] #simple example
-in_features <- in_cols[6:15]
+# in_features <- in_cols[6:dim(in_data)[2]]
+in_features <- in_cols[8:dim(in_data)[2]] #monthly
 
 # designate which input column is the target
 # in_target <- in_cols[8] #simple example
-in_target <- in_cols[5]
+# in_target <- in_cols[5]
+in_target <- in_cols[6] #monthly
 
 # designate which column is time (if using)
 # CIA note: currently required, can add option later
 # in_time <- in_cols[9] #simple example
 in_time <- in_cols[1]
+in_time <- "yr"
 
 # need consistent naming of target and time vars
 # in_data %<>%  dplyr::rename(target = base_simple) #simple example
@@ -123,8 +148,8 @@ setup_hgrid <- TRUE
 setup_newgrid <- TRUE
 
 # if you want to read in a specific grid file, set to TRUE and put in the .csv filename (fle must be saved in inputs folder)
-setup_gridfile <- FALSE
-setup_gridfilename <- "grid.csv"
+setup_gridfile <- TRUE
+setup_gridfilename <- "annual_grid.csv"
 
 #set a maximum number of hyperparameter combos here if desired
 user_hparam_grid_max <- 100
@@ -147,12 +172,12 @@ user_treecheck <- c(10, 50, seq(from = 100, to = 5000, by = 100))
 # do you want a standard data split based on optimal splitting work by Joseph (2022) or custom split?
 # TRUE = standard split
 # FALSE = custom split
-setup_datasplit <- FALSE
+setup_datasplit <- TRUE
 
 # if you have a custom split, is it based on data results or user setting?
 # TRUE = based on automated data results
 # FALSE = user specified ratio
-setup_customsplit <- TRUE
+setup_customsplit <- FALSE
 
 # a custom ratio must be > 0 and < 1; 0.60 to 0.75 is standard in the literature
 # the custom ratio represents the proportion of training data
@@ -607,7 +632,7 @@ write(paste("Time elapsed for model training (mins): ", round(train_time[3], dig
       file = here::here("output", user_modelname, "info.txt"), append = TRUE)
 write(paste("Design set number of combos: ", dim(design_set)[1]),
       file = here::here("output", user_modelname, "info.txt"), append = TRUE)
-write_csv(train_results, path = here::here("output", user_modelname, "train_hparam_results.csv"))
+write_csv(train_results, file = here::here("output", user_modelname, "train_hparam_results.csv"))
 
 # save best model info
 dir_path <-  here::here("output", user_modelname, "tuned_model.txt")
@@ -841,6 +866,22 @@ for(i in 1:test_slices)
 
 }
 
+results %<>% mutate(diff = `.pred` - target)
+all_slice_preds <- ggplot(results, aes(x = target, y = `.pred`)) +
+  geom_point(aes(color = factor(time))) +
+  geom_abline() +
+  theme_classic()
+get_plot_save(plot = all_slice_preds, plotname_png = "p_all_slice_preds.png", model_name = user_modelname)
+
+test_slice_preds <- results %>%
+  dplyr::filter(time > min(testing(dat_split)$time)) %>%
+  ggplot(aes(x = target, y = `.pred`)) +
+  geom_point(aes(color = factor(time))) +
+  geom_abline() +
+  theme_classic()
+get_plot_save(plot = test_slice_preds, plotname_png = "p_test_slice_preds.png", model_name = user_modelname)
+
+
 # SAVE THE BEST FIT FOR EACH SLICE (lowest rmse of any hyperparam set for each set of years predicted)
 best_hparams_slice <- NULL
 for(i in 1:test_slices)
@@ -993,16 +1034,18 @@ test_pred
 # features
 test_features <- test_simple[which(names(test_simple) != "target")]
 
+if(any(is.na(in_data)) == TRUE) {test_splitrule = "variance"} else(test_splitrule = best_squid_rf$fit$splitrule)
+
 rng <- ranger(target ~ ., data = in_data,
               num.trees = best_squid_rf$fit$num.trees,
               mtry = best_squid_rf$fit$mtry,
               min.node.size = best_squid_rf$fit$min.node.size,
               importance = "permutation",
-              splitrule = best_squid_rf$fit$splitrule)
+              splitrule = test_splitrule)
 
-in_data <- test_simple[which(names(test_simple) != "target")]
+in_data2 <- test_simple[which(names(test_simple) != "target")]
 pfun <- function(object, newdata) predict(object, data = newdata)$predictions
-predictor <- Predictor$new(model = rng, data = in_data,
+predictor <- Predictor$new(model = rng, data = in_data2,
                            y = as.data.frame(test_simple$target %>% as.data.frame() %>% rename(target = '.')),
                            predict.fun = pfun)
 

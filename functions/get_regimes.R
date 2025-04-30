@@ -12,7 +12,9 @@
 #'
 get_regimes <- function(dat, dat_dist, n_states, n_iters = 200)
 {
+  # dat %<>% select_if(~ !any(is.na(.)))
   dat_names <- names(dat)
+  # dat_dist <- lapply(dat, function(x){x = "norm"})
 
   AICs <- 0
   best_aic <- 1.0e10
