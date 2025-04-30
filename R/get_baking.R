@@ -52,7 +52,7 @@ make_recipe <- function(analysis_data)
 #'
 #' @examples
 #'
-get_baked <- function(kfold, splitN)
+get_baking <- function(kfold, splitN)
 {
   d <- get_k_breaks(kfold, splitN)
   analy_data <- d$analysis_data

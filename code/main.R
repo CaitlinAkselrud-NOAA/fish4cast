@@ -386,7 +386,7 @@ train_baked <- list()
 
 for(i in 1:(train_slices))
 {
-  train_baked[[i]] <- get_baked(kfold = kfold_train,
+  train_baked[[i]] <- get_baking(kfold = kfold_train,
                                 splitN=i)
 }
 
@@ -410,7 +410,7 @@ if(user_testmethod > 1)
 
   for(i in 1:(test_slices))
   {
-    test_baked[[i]] <- get_baked(kfold = kfold_test,
+    test_baked[[i]] <- get_baking(kfold = kfold_test,
                                  splitN=i)
   }
 
