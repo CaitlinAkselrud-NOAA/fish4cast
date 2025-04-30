@@ -35,8 +35,8 @@ devtools::load_all() #load package functions fish4cast; development
 # functions ---------------------------------------------------------------
 
 # read in functions from the 'functions' folder
-functions <- list.files(here::here("R"))
-purrr::walk(functions, ~ source(here::here("R", .x)))
+# functions <- list.files(here::here("R"))
+# purrr::walk(functions, ~ source(here::here("R", .x)))
 
 # sk_explain1 <- list.files(here::here("helpers", "scikit-explain-0.1.4",
 #                                      "skexplain", "main", "PermutationImportance"))
@@ -44,8 +44,7 @@ purrr::walk(functions, ~ source(here::here("R", .x)))
                                                 # "skexplain", "main", "PermutationImportance", .x)))
 
 # model name
-# user_modelname <- "base_simple"
-user_modelname <- "annual_largeVessels"
+user_modelname <- "base_simple"
 
 dir.create(here::here("input"), showWarnings = F)
 dir.create(here::here("output"), showWarnings = F)
@@ -66,9 +65,7 @@ file.create(here::here("output", user_modelname, "info.txt"), showWarnings = F)
 in_ts <- TRUE #T/F input is a time series
 
 # input file to use
-in_filename <- "covMatrix_LargeVessels_AnnualPredictors_AnnualCPUE.csv"
-# in_filename <- "covMatrix_MediumVessels_AnnualPredictors_AnnualCPUE.csv"
-# in_filename <- "covMatrix_SmallVessels_AnnualPredictors_AnnualCPUE.csv"
+in_filename <- "sim_input_data_base_simple2024-07-20.csv"
 
 # read in input file
 in_data <- read_csv(here::here("input", in_filename)) %>%
@@ -82,26 +79,21 @@ write(paste("Cleaned input column names read in as: ", in_cols),
       file = here::here("output", user_modelname,"info.txt"), append = TRUE)
 
 # designate which input columns are features
-# in_features <- in_cols[1:7] #simple example
-in_features <- in_cols[6:15]
+in_features <- in_cols[1:7] #simple example
 
 # designate which input column is the target
-# in_target <- in_cols[8] #simple example
-in_target <- in_cols[5]
+in_target <- in_cols[8] #simple example
 
 # designate which column is time (if using)
 # CIA note: currently required, can add option later
-# in_time <- in_cols[9] #simple example
-in_time <- in_cols[1]
+in_time <- in_cols[9] #simple example
 
 # need consistent naming of target and time vars
-# in_data %<>%  dplyr::rename(target = base_simple) #simple example
-# in_data %<>%  dplyr::rename(time = sim_year) #simple example
-in_data %<>%  dplyr::rename(target = cpue)
-in_data %<>%  dplyr::rename(time = yr)
+in_data %<>%  dplyr::rename(target = base_simple) #simple example
+in_data %<>%  dplyr::rename(time = sim_year) #simple example
 
 # additional data cleaning
-in_data %<>% dplyr::select(-size_class, -total, -days_fished)
+# in_data %<>% dplyr::select()
 
 # future: spatial?
 
@@ -124,15 +116,15 @@ n_iters <- 200
 # do you want to test every hyperparam combo? (computationally intensive)
 # TRUE means test every combo
 # FALSE mean test a max number of combos; default = 100.
-setup_hgrid <- TRUE
+setup_hgrid <- FALSE
 
 # if you are setting a max number of combinations, you can generate your grid once and pull it in
 # TRUE means generate new hyparparmeter grid
 # FALSE will call in an existing grid
-setup_newgrid <- TRUE
+setup_newgrid <- FALSE
 
 # if you want to read in a specific grid file, set to TRUE and put in the .csv filename (fle must be saved in inputs folder)
-setup_gridfile <- FALSE
+setup_gridfile <- TRUE
 setup_gridfilename <- "grid.csv"
 
 #set a maximum number of hyperparameter combos here if desired
@@ -247,7 +239,8 @@ future::plan(future::multicore, workers = n_workers)
 # -> THE FOLLOWING CODE IS AUTOMATED.
 
 all_input <- get_input_data(in_ts = in_ts, in_data = in_data, max_states_test = max_states_test,
-               all_features = all_features, dists_feat = dists_feat, n_iters = n_iters)
+               all_features = all_features, dists_feat = dists_feat, n_iters = n_iters,
+               setup_datasplit = setup_datasplit, setup_customsplit = setup_customsplit)
 
 all_input
 
@@ -299,77 +292,6 @@ all_input
 # ** training vs testing -------------------------------------------------
 
 # future: currently all based around initial_time_split; future: add feature for random splits
-
-# updated science on splitting, Joseph 2022
-# optimal ratio is: sqrt(num_params)/(sqrt(num_params)+1)
-# this implementation uses 3 hyperparameters- n_trees, min_n, mtry
-
-split_ratio <- sqrt(3)/(sqrt(3)+1) #based on Joseph (2022) and 3 hparams
-
-if(setup_datasplit == TRUE) # standard optimal split based on Joseph (2022)
-{
-  dat_split <- rsample::initial_time_split(in_data, prop = split_ratio)
-}else if(setup_datasplit == FALSE)
-{
-  if(setup_customsplit == TRUE) # use data exploration results to set split
-  {
-    split_check <- round(split_ratio*dim(in_data)[1], 0)
-    if(any(split_check == reg_change)) #if you ARE splitting on a regime change
-    {
-      split_range <- seq(from = round(0.6*dim(in_data)[1],0),
-                            to = round(0.75*dim(in_data)[1],0),
-                            by = 1)
-      split_update <- split_range[!split_range %in% split_check]
-      if(any(reg_change %in% split_update))
-      {
-        # produce a warning that multiple regimes are detected within the splitting range
-        # recommend custom user input after data analysis
-        split_fix <- split_range[!split_range %in% reg_change]
-        new_split <- split_fix[round(length(split_fix)/2, 0)]
-        new_split_ratio <- new_split/dim(in_data)[1]
-        dat_split <- rsample::initial_time_split(in_data, prop = new_split_ratio)
-        write(paste("WARNING: multiple regime shifts detected in the train/test split;",
-                    "RECOMMEND user reviews data, regimes, and number of regime states detected",
-                    "regimes detected in time(s):",in_data$time[reg_change]),
-              file = here::here("output", user_modelname,"info.txt"), append = TRUE)
-        write(paste("Optimal split range is between times:",
-                    min(in_data$time[split_range]), max(in_data$time[split_range])),
-              file = here::here("output", user_modelname,"info.txt"), append = TRUE)
-        write(paste("Current train/test split set to", in_data$time[new_split]),
-              file = here::here("output", user_modelname,"info.txt"), append = TRUE)
-
-      }else { #set the split halfway between the regime shift and upper bound of std splitting
-        split_fix <- (reg_change+1):max(split_range)
-        new_split <- split_fix[round(length(split_fix)/2, 0)]
-        new_split_ratio <- new_split/dim(in_data)[1]
-        dat_split <- rsample::initial_time_split(in_data, prop = new_split_ratio)
-        write(paste("ATTENTION: a regime shift was detected in the train/test split;",
-                    "regimes detected in time:",in_data$time[reg_change]),
-              file = here::here("output", user_modelname,"info.txt"), append = TRUE)
-        write(paste("Optimal split range is between times:",
-                    min(in_data$time[split_range]), max(in_data$time[split_range])),
-              file = here::here("output", user_modelname,"info.txt"), append = TRUE)
-        write(paste("Current train/test split set to", in_data$time[new_split]),
-              file = here::here("output", user_modelname,"info.txt"), append = TRUE)
-      }
-
-    }else { #if not, then use std. split
-      dat_split <- rsample::initial_time_split(in_data, prop = split_ratio)}
-    # split_ratio <- split_recommended
-    dat_split <- rsample::initial_time_split(in_data, prop = split_ratio)
-  }
-  if(setup_customsplit == FALSE)
-  {
-    split_ratio <- user_customratio
-    dat_split <- rsample::initial_time_split(in_data, prop = split_ratio)
-  }
-}
-
-write_csv(training(dat_split), file = here::here("output", user_modelname, "training.csv"))
-write_csv(testing(dat_split), file = here::here("output", user_modelname, "testing.csv"))
-write(paste("Train/test splitting ratio: ", split_ratio),
-      file = here::here("output", user_modelname,"info.txt"), append = TRUE)
-
 
 # ** training cross-validation -------------------------------------------
 
