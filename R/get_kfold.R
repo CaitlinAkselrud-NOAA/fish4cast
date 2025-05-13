@@ -28,7 +28,7 @@ get_kfold <- function(k_data_in = training(dat_split), #data for cross-validatio
                       k_skip, #don't skip any resamples (thins thins data)
                       k_lag) #lag btw assessment and analysis sets...)
 {
-  if(is.na(k_init_time)){k_init_time = round(dim(training(dat_split))[1]/3, digits = 0)}
+  if(is.na(k_init_time)){k_init_time = round(dim(k_data_in)[1]/3, digits = 0)}
   if(is.na(k_assess)){k_assess = 1}
   if(is.na(k_cumulative)){k_cumulative = T}
   if(is.na(k_skip)){k_skip = 0}
