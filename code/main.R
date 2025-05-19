@@ -26,6 +26,7 @@ library(patchwork) #for plotting
 library(iml)
 library(glmnet)
 library(partykit)
+library(fitdistrplus) #model selex
 
 # required for functions (add to DESCRIPTION dependencies; then run devtools::document to add to NAMESPACE file)
 
@@ -113,15 +114,15 @@ n_iters <- 200
 # do you want to test every hyperparam combo? (computationally intensive)
 # TRUE means test every combo
 # FALSE mean test a max number of combos; default = 100.
-setup_hgrid <- FALSE
+setup_hgrid <- TRUE
 
 # if you are setting a max number of combinations, you can generate your grid once and pull it in
-# TRUE means generate new hyparparmeter grid
+# TRUE means generate new hyperparameter grid
 # FALSE will call in an existing grid
-setup_newgrid <- FALSE
+setup_newgrid <- TRUE
 
 # if you want to read in a specific grid file, set to TRUE and put in the .csv filename (fle must be saved in inputs folder)
-setup_gridfile <- TRUE
+setup_gridfile <- FALSE
 setup_gridfilename <- "grid.csv"
 
 #set a maximum number of hyperparameter combos here if desired
@@ -129,7 +130,7 @@ user_hparam_grid_max <- 100
 
 # set the vector of numbers of trees to test in training
 # user_treevec <- c(10, 100, 500) #simple example
-user_treevec <- c(10, 50, seq(from = 100, to = 500, by = 100))
+user_treevec <- c(10, 50, seq(from = 100, to = 500, by = 100), 1000, 2000)
 
 # set the splitrule you want to use for tree construction
 user_splitrule <- c("extratrees")
@@ -147,8 +148,8 @@ user_treecheck <- c(10, 50, seq(from = 100, to = 5000, by = 100))
 # FALSE = custom split
 setup_datasplit <- FALSE
 
-# if you have a custom split, is it based on data results or user setting?
-# TRUE = based on automated data results
+# if you have a custom split, is it based on features in data or user setting?
+# TRUE = based on automated data results (e.g. regime detection)
 # FALSE = user specified ratio
 setup_customsplit <- TRUE
 
@@ -204,7 +205,7 @@ user_uncertainty_metric <- 1
 
 # what is your cutoff for uncertainty?
 # user_uncertain_cutoff <- 2 #simple example
-user_uncertain_cutoff <- round(0.05*min(in_data$target),0) #within 5% of the lowest fished value
+user_uncertain_cutoff <- round(0.05*min(abs(in_data$target)),0) #within 5% of the lowest fished value
 
 
 # * * model selection -----------------------------------------------------
@@ -318,7 +319,7 @@ design_set <- get_hyperparameters(train_baked = folds$train_baked,
                     user_hparam_grid_max = user_hparam_grid_max,
                     user_treevec = user_treevec,
                     user_splitrule = user_splitrule)
-# cia: check default settings
+# cia: think about grid expansion with trees and splitrule, or whether to more manually limit grid size
 
 # * training --------------------------------------------------------------
 
@@ -360,6 +361,22 @@ test_single <- get_test_single(uncertainty = uncertainty,
                 user_modelname = user_modelname)
 # cia: fiddle with output obsv v exp plot
 
+test_single_p <- ggplot(test_single, aes(x = target, y = pred, label = time)) +
+  # geom_point(aes(x = target, y = .pred, alpha = time, size = time), color = "darkblue") +
+  geom_point(aes(size = time, color = as.factor(time))) +
+  geom_text( size = 1.5) +
+  geom_abline()+
+  theme_classic()+
+  xlab("Observed")+
+  ylab("Predicted")+
+  xlim(min(c(test_single$target, test_single$pred)),
+       max(c(test_single$target, test_single$pred))) +
+  ylim(min(c(test_single$target, test_single$pred)),
+       max(c(test_single$target, test_single$pred)))
+test_single_p
+get_plot_save(plot = test_single_p, plotname_png = "test_single.png", width = 5, height = 7, model_name = user_modelname)
+
+
 # * * k-fold fit ----------------------------------------------------------
 
 # test_baked[[i]]
@@ -378,7 +395,11 @@ test_folds_p <- ggplot(test_folds, aes(x = target, y = .pred, label = time)) +
   geom_abline()+
   theme_classic()+
   xlab("Observed")+
-  ylab("Predicted")
+  ylab("Predicted") +
+  xlim(min(c(test_folds$target, test_folds$.pred)),
+       max(c(test_folds$target, test_folds$.pred))) +
+  ylim(min(c(test_folds$target, test_folds$.pred)),
+       max(c(test_folds$target, test_folds$.pred)))
 test_folds_p
 get_plot_save(plot = test_folds_p, plotname_png = "test_folds.png", width = 6, height = 5, model_name = user_modelname)
 
@@ -413,102 +434,7 @@ get_plot_save(plot = test_folds_p2, plotname_png = "test_folds_finalfold.png", w
 # training output:
 # hyperparameter stuff:
 
-# * * training diagnostic plots --------------------------------------------
 
-# save histogram
-p_hist_rmse <- ggplot() +
-  geom_histogram(aes(rmse_slice), fill = "black", color = "white") +
-  theme_classic() +
-  scale_y_continuous(expand = c(0,0))+
-  labs(x = "RMSE",
-       y = "Frequency")
-p_hist_mae <- ggplot() +
-  geom_histogram(aes(mae_slice), fill = "black", color = "white") +
-  theme_classic() +
-  scale_y_continuous(expand = c(0,0))+
-  labs(x = "MAE",
-       y = "Frequency")
-p_hist_rsq <- ggplot() +
-  geom_histogram(aes(rsq_slice), fill = "black", color = "white") +
-  theme_classic() +
-  scale_y_continuous(expand = c(0,0))+
-  labs(x = "R^2",
-       y = "Frequency")
-p_hist_rpd <- ggplot() +
-  geom_histogram(aes(rpd_slice), fill = "black", color = "white") +
-  theme_classic() +
-  scale_y_continuous(expand = c(0,0))+
-  labs(x = "RPD",
-       y = "Frequency")
-
-# save ggplots
-p_hyperparams_trees <- ggplot() +
-  geom_point(aes(x = design_set$trees, y = rmse_slice, color = as.factor(design_set$min_n)), size = 2) +
-  theme_classic() +
-  labs(x = "Number of trees",
-       y = "RMSE",
-       color = "Min num nodes") #+
-# scale_color_manual(values=c("#762a83", "#1b7837"))
-
-p_hyperparams_trees2 <- ggplot() +
-  geom_point(aes(x = design_set$trees, y = rmse_slice, color = as.factor(design_set$mtry)), size = 2) +
-  theme_classic() +
-  labs(x = "Number of trees",
-       y = "RMSE",
-       color = "Num predictors") #+
-# scale_color_manual(values=c("#762a83", "#1b7837"))
-
-
-p_hyperparams_minn <- ggplot() +
-  geom_point(aes(x = design_set$min_n, y = rmse_slice, color = as.factor(design_set$trees)), size = 2) +
-  theme_classic() +
-  labs(x = "Minimum number of data points per node",
-       y = "RMSE",
-       color = "Number of trees") #+
-# scale_color_manual(values=c("#762a83", "#1b7837"))
-
-
-p_hyperparams_mtry <- ggplot() +
-  geom_point(aes(x = design_set$mtry, y = rmse_slice, color = as.factor(design_set$trees)), size = 2) +
-  theme_classic() +
-  labs(x = "Number of predictors randomly sampled",
-       y = "RMSE",
-       color = "Number of trees") #+
-# scale_color_manual(values=c("#762a83", "#1b7837"))
-
-# trees
-
-tree_plot <-
-  bind_cols(design_set, rmse_slice=rmse_slice) %>%
-  ggplot()+
-  geom_line(aes(x = trees, y = rmse_slice)) +
-  geom_point(aes(x = trees, y = rmse_slice)) +
-  theme_classic()+
-  xlab("Number of trees")+
-  ylab("RMSE")+
-  # facet_wrap(~combo)
-  facet_wrap(vars(min_n, mtry), labeller = "label_both") +
-  theme(axis.text.x=element_text(angle=90, hjust=1))
-# tree_plot
-if(test_mode == TRUE) {tree_plot}
-
-# SAVE hyperparameter plots
-
-get_plot_save(plot = p_hist_rmse, plotname_png = "p_hist_rmse.png", model_name = user_modelname)
-get_plot_save(plot = p_hist_mae, plotname_png = "p_hist_mae.png", model_name = user_modelname)
-get_plot_save(plot = p_hist_rsq, plotname_png = "p_hist_rsq.png", model_name = user_modelname)
-get_plot_save(plot = p_hist_rpd, plotname_png = "p_hist_rpd.png", model_name = user_modelname)
-get_plot_save(plot = p_hyperparams_trees, plotname_png = "p_hyperparams_trees.png", model_name = user_modelname)
-get_plot_save(plot = p_hyperparams_trees2, plotname_png = "p_hyperparams_trees2.png", model_name = user_modelname)
-get_plot_save(plot = p_hyperparams_minn, plotname_png = "p_hyperparams_minn.png", model_name = user_modelname)
-get_plot_save(plot = p_hyperparams_mtry, plotname_png = "p_hyperparams_mtry.png", model_name = user_modelname)
-get_plot_save(plot = tree_plot, plotname_png = "tree_plot.png", width = 8, height = 20, model_name = user_modelname)
-
-
-# * * variable importance -------------------------------------------------
-
-# variable importance:
-write_csv(var_import_slices_train, path = here::here("output", user_modelname, "train_var_import.csv"))
 
 
 # * * model-agnostic methods ----------------------------------------------

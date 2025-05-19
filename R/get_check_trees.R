@@ -51,6 +51,11 @@ get_check_trees <- function(train_mod,
     xlab("Number of trees")+
     ylab("RMSE")
 
+  print(tree_check_plot)
+
   get_plot_save(plot = tree_check_plot, plotname_png = "tree_effect.png", width = 6, height = 5, model_name = user_modelname)
+
+
+  return(bind_cols(user_treecheck = user_treecheck, rmse = rmse_slice_trees))
 
 }

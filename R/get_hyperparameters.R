@@ -27,8 +27,11 @@ get_hyperparameters <- function(train_baked,
   min_n_maximum <- dim(train_baked[[1]]$baked_squid)[1]
 
 
-  tune_grid <- dials::parameters(min_n(),mtry())  %>%
+  tune_grid <- dials::parameters(min_n(),mtry(), trees(range(user_treevec)))  %>%
     dials::finalize(mtry(), x = in_data  %>% dplyr::select(-target, -time))
+  tune_grid <- dials::parameters(min_n(),mtry(), trees(range(user_treevec)))  %>%
+    dials::finalize(mtry(), x = in_data  %>% dplyr::select(-target, -time))
+
   tune_grid$object[[1]]$range$upper <-min_n_maximum
 
   # alt method, get params with range of tree numbers incl:
@@ -52,17 +55,17 @@ get_hyperparameters <- function(train_baked,
     if(setup_hgrid == TRUE) # full design set, all hyperparam combos
     {
       design_set <- expand_grid(min_n = seq(from = tune_grid$object[[1]]$range$lower, to = min_n_maximum, by = 1),
-                                mtry = seq(from = tune_grid$object[[2]]$range$lower, to = tune_grid$object[[2]]$range$upper, by = 1)) %>%
-        rowid_to_column(var = 'combo') %>%
-        expand_grid(trees = user_treevec) %>%
-        expand_grid(splitrule = user_splitrule)
+                                mtry = seq(from = tune_grid$object[[2]]$range$lower, to = tune_grid$object[[2]]$range$upper, by = 1),
+                                trees = user_treevec,
+                                splitrule = user_splitrule) %>%
+        rowid_to_column(var = 'combo')
       write_csv(design_set, file = here("input", paste0("grid.csv")))
       write_csv(design_set, file = here("input", paste0("grid", Sys.Date(),".csv")))
     }
     if(setup_hgrid == FALSE) # max size design set
     {
       design_set <- dials::grid_space_filling(tune_grid, size = user_hparam_grid_max) %>%
-        expand_grid(trees = user_treevec) %>%
+        # expand_grid(trees = user_treevec) %>%
         expand_grid(splitrule = user_splitrule)
       write_csv(design_set, file = here("input", paste0("grid.csv")))
       write_csv(design_set, file = here("input", paste0("grid", Sys.Date(),".csv")))
