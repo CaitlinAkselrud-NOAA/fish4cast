@@ -236,7 +236,8 @@ future::plan(future::multicore, workers = n_workers)
 
 # -> THE FOLLOWING CODE IS AUTOMATED.
 
-all_input <- get_input_data(in_ts = in_ts, in_data = in_data, max_states_test = max_states_test,
+all_input <- get_input_data(in_ts = in_ts, in_data = in_data, in_features = in_features,
+                            max_states_test = max_states_test,
                all_features = all_features, dists_feat = dists_feat, n_iters = n_iters,
                setup_datasplit = setup_datasplit, setup_customsplit = setup_customsplit)
 

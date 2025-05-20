@@ -11,7 +11,7 @@
 #' @export
 #'
 #' @examples
-get_input_data <- function(in_ts, in_data, max_states_test, all_features, dists_feat, n_iters = 200,
+get_input_data <- function(in_ts, in_data, in_features, max_states_test, all_features, dists_feat, n_iters = 200,
                            setup_datasplit = TRUE, setup_customsplit = FALSE)
 {
   # input data --------------------------------------------------------------
@@ -20,14 +20,15 @@ get_input_data <- function(in_ts, in_data, max_states_test, all_features, dists_
   #   this is important later when you do your training/testing splits
   if(in_ts == TRUE){in_data <- in_data %>% arrange(time) }
 
-  features <- in_data[which(names(in_data) != "target")]
+  features <- in_features
   # features <- test_simple[which(names(test_simple) != "target")]
   # features_notime <- features[which(names(features) != "time")]
 
   # * input data exploration ------------------------------------------------
   # regime shift: assume discrete process (distinct shift)
   # based on Zoe Rand: HMMs
-  if(setup_datasplit == FALSE && setup_customsplit == TRUE) #test for regimes
+  if(setup_datasplit == FALSE)
+    {if(setup_customsplit == TRUE) #test for regimes
   {
     regimes_aic <- vector(length = length(2:max_states_test))
     regimes_shift <- matrix(nrow = length(2:max_states_test),
@@ -56,7 +57,7 @@ get_input_data <- function(in_ts, in_data, max_states_test, all_features, dists_
 
     reg_change <- which(diff(fit_regime) != 0) + 1
 
-  } else{reg_change <- -1}
+  }} else{reg_change <- -1}
 
   split_data <- get_split_data(setup_datasplit, setup_customsplit,
                              in_data, reg_change)
