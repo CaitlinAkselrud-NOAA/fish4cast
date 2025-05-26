@@ -59,7 +59,7 @@ get_training <- function(train_slices,
       }
       r_forest_all[[j]] <- r_forests
       # rmse is across all k-folds for each unique hparam set
-      rmse_slice[j] <-  obsv_pred_assm %>% mutate(error = .pred - target) %>% summarize(rmse = sqrt(sum(error^2))) %>% as.numeric() #yardstick::rmse_vec(truth = obsv_pred_assm$target, estimate = obsv_pred_assm$.pred)
+      rmse_slice[j] <- yardstick::rmse_vec(truth = obsv_pred_assm$target, estimate = obsv_pred_assm$.pred)
       mae_slice[j] <-  yardstick::mae_vec(truth = obsv_pred_assm$target, estimate = obsv_pred_assm$.pred)
       rsq_slice[j] <-  yardstick::rsq_vec(truth = obsv_pred_assm$target, estimate = obsv_pred_assm$.pred)
       rpd_slice[j] <-  yardstick::rpd_vec(truth = obsv_pred_assm$target, estimate = obsv_pred_assm$.pred)
@@ -193,7 +193,7 @@ get_training <- function(train_slices,
       }
       r_forest_all[[j]] <- r_forests
       # rmse is across all k-folds for each unique hparam set
-      rmse_slice[j] <-  obsv_pred_assm %>% mutate(error = .pred - target) %>% summarize(rmse = sqrt(sum(error^2))) %>% as.numeric() #yardstick::rmse_vec(truth = obsv_pred_assm$target, estimate = obsv_pred_assm$.pred)
+      rmse_slice[j] <- yardstick::rmse_vec(truth = obsv_pred_assm$target, estimate = obsv_pred_assm$.pred)
       mae_slice[j] <-  yardstick::mae_vec(truth = obsv_pred_assm$target, estimate = obsv_pred_assm$.pred)
       rsq_slice[j] <-  yardstick::rsq_vec(truth = obsv_pred_assm$target, estimate = obsv_pred_assm$.pred)
       rpd_slice[j] <-  yardstick::rpd_vec(truth = obsv_pred_assm$target, estimate = obsv_pred_assm$.pred)
@@ -226,30 +226,6 @@ get_training <- function(train_slices,
 
     new_grid <- bind_cols(trees = trees, mtry = mtries,
                           min_n = min_ns, splitrule = splitrules, rmse = best_rmse_group)
-    # post post plots
-    p_post_tree <- ggplot() +
-      geom_histogram(aes(new_grid$trees), fill = post_color, color = post_outline) +
-      geom_histogram(aes(train_results$ntrees), fill = "#D55E00") +
-      theme_classic()
-
-    p_post_mtries <- ggplot() +
-      geom_histogram(aes(new_grid$mtry), fill = post_color, color = post_outline) +
-      geom_histogram(aes(train_results$mtry), fill = "#D55E00") +
-      theme_classic()
-
-    p_post_minn <- ggplot() +
-      geom_histogram(aes(new_grid$min_n), fill = post_color, color = post_outline) +
-      geom_histogram(aes(train_results$min_n), fill = "#D55E00") +
-      theme_classic()
-
-    p_post_rmse <- ggplot() +
-      geom_histogram(aes(best_rmse_group), fill = post_color, color = post_outline) +
-      geom_histogram(aes(best_metric), fill = "#D55E00") +
-      theme_classic()
-
-    p_postpost <- p_post_rmse/(p_post_tree + p_post_mtries + p_post_minn)
-
-    get_plot_save(plot = p_postpost, plotname_png = "p_hparam_best_selex.png", model_name = user_modelname)
 
     print(paste("end posterior hyperparam tuning time: ", Sys.time()))
   })
@@ -280,6 +256,36 @@ get_training <- function(train_slices,
                              mtry = best_mtry,
                              min_n = best_minn,
                              splitrule = best_splitrule)
+  # post post plots
+  p_post_tree <- ggplot() +
+    geom_histogram(aes(new_grid$trees), fill = post_color, color = post_outline) +
+    geom_histogram(aes(train_results$ntrees), fill = "#D55E00") +
+    theme_classic()
+
+  p_post_mtries <- ggplot() +
+    geom_histogram(aes(new_grid$mtry), fill = post_color, color = post_outline) +
+    geom_histogram(aes(train_results$mtry), fill = "#D55E00") +
+    theme_classic()
+
+  p_post_minn <- ggplot() +
+    geom_histogram(aes(new_grid$min_n), fill = post_color, color = post_outline) +
+    geom_histogram(aes(train_results$min_n), fill = "#D55E00") +
+    theme_classic()
+
+  best_metric <- dplyr::case_when(user_hp_select == 1 ~ min(rmse_slice),
+                                  user_hp_select == 2 ~ min(mae_slice),
+                                  user_hp_select == 3 ~ max(rsq_slice),
+                                  user_hp_select == 4 ~ min(rpd_slice))
+
+  p_post_rmse <- ggplot() +
+    geom_histogram(aes(best_rmse_group), fill = post_color, color = post_outline) +
+    geom_histogram(aes(best_metric), fill = "#D55E00") +
+    theme_classic()
+
+  p_postpost <- p_post_rmse/(p_post_tree + p_post_mtries + p_post_minn)
+
+  get_plot_save(plot = p_postpost, plotname_png = "p_hparam_best_selex.png", model_name = user_modelname)
+
 
 
   # SAVE VARIABLE IMPORTANCE FOR ALL FOLDS IN TUNED MODEL
@@ -405,5 +411,5 @@ get_training <- function(train_slices,
 
   return(list(trained_model = r_forest_all[[best_hyperparam_set]],
               train_hparams = train_results,
-              var_import = var_import))
+              var_import = var_import_slices_train))
 }

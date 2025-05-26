@@ -384,7 +384,8 @@ get_plot_save(plot = test_single_p, plotname_png = "test_single.png", width = 5,
 test_folds <- get_test_folds(test_baked = folds$test_baked,
                              train_baked = folds$train_baked,
                              design_set = design_set,
-                             test_slices = folds$test_slices)
+                             test_slices = folds$test_slices,
+                             train_slices = folds$train_slices)
 # cia: need to add selex metric to this fxn and plot
 
 

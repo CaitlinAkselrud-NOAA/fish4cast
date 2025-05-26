@@ -1,4 +1,4 @@
-get_test_folds <- function(test_baked, train_baked, design_set, test_slices)
+get_test_folds <- function(test_baked, train_baked, design_set, test_slices, train_slices)
 {
   # test_slices
   options(future.rng.onMisuse="ignore")

@@ -1,7 +1,7 @@
 #' Set up hyperparameter grid
 #'
 #' @param train_baked
-#' @param in_data
+#' @param in_features
 #' @param setup_hgrid defaults to creating a grid
 #' @param setup_newgrid defaults to creating a FULL grid
 #' @param setup_gridfile defaults to creating grid, not reading in
@@ -15,7 +15,7 @@
 #'
 #' @examples
 get_hyperparameters <- function(train_baked,
-                                in_data,
+                                in_features,
                                 setup_hgrid = TRUE,
                                 setup_newgrid = TRUE,
                                 setup_gridfile = FALSE,
@@ -28,9 +28,7 @@ get_hyperparameters <- function(train_baked,
 
 
   tune_grid <- dials::parameters(min_n(),mtry(), trees(range(user_treevec)))  %>%
-    dials::finalize(mtry(), x = in_data  %>% dplyr::select(-target, -time))
-  tune_grid <- dials::parameters(min_n(),mtry(), trees(range(user_treevec)))  %>%
-    dials::finalize(mtry(), x = in_data  %>% dplyr::select(-target, -time))
+    dials::finalize(mtry(), x = in_features)  #%>% dplyr::select(-target, -time))
 
   tune_grid$object[[1]]$range$upper <-min_n_maximum
 
@@ -91,3 +89,4 @@ get_hyperparameters <- function(train_baked,
 
   return(design_set = design_set)
 }
+

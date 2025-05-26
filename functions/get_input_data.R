@@ -63,6 +63,7 @@ get_input_data <- function(in_ts, in_data, in_features, max_states_test, all_fea
                                in_data, reg_change)
 
   return(list(in_data = in_data,
+              all_features = in_data %>% dplyr::select(any_of(in_features)),
               reg_change = reg_change,
               fit_regime = fit_regime,
               regime_periods = regime_periods,
