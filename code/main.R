@@ -91,7 +91,8 @@ in_data %<>%  dplyr::rename(target = base_simple) #simple example
 in_data %<>%  dplyr::rename(time = sim_year) #simple example
 
 # additional data cleaning
-# in_data %<>% dplyr::select()
+all_features <- in_data %>% dplyr::select(any_of(in_features))
+in_clean <- in_data %>% dplyr::select(any_of(in_features), target)
 
 # future: spatial?
 
@@ -290,6 +291,7 @@ all_input
 # ** training cross-validation -------------------------------------------
 
 folds <- get_folds(input_data = all_input,
+                   in_clean,
            k_init_time_train,
            k_assess_train,
            k_cumulative_train,

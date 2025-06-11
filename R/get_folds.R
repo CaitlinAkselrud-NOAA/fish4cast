@@ -19,6 +19,7 @@
 #'
 #' @examples
 get_folds <- function(input_data,
+                      in_clean,
                       k_init_time_train,
                       k_assess_train,
                       k_cumulative_train,
@@ -45,12 +46,13 @@ get_folds <- function(input_data,
   for(i in 1:(train_slices))
   {
     train_baked[[i]] <- get_baking(kfold = kfold_train,
-                                   splitN=i)
+                                   splitN=i,
+                                   in_clean)
   }
 
   # * * testing single fit -------------------------------------------------
 
-  test_simple <- get_test_bake(all_input$testing)
+  test_simple <- get_test_bake(all_input$testing, in_clean)
 
   # ** optional testing cross-validation ---------------------------------------
 
@@ -71,7 +73,8 @@ get_folds <- function(input_data,
     for(i in 1:(test_slices))
     {
       test_baked[[i]] <- get_baking(kfold = kfold_test,
-                                    splitN=i)
+                                    splitN=i,
+                                    in_clean)
     }
 
   }

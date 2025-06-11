@@ -174,6 +174,8 @@ get_training <- function(train_slices,
     # arrange forest results, and extract rmse
     print("almost done with hyperparam tuning....")
     print(paste("start saving time: ", Sys.time()))
+
+    # FIND THE BEST PARAMETER SET FOR THE WHOLE TRAINING SET
     for(j in 1:dim(new_grid)[1])
     {
       if(j == 1)

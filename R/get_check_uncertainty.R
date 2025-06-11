@@ -99,7 +99,6 @@ get_check_uncertainty <- function(train_mod,
                                  user_selex_metric == 3 ~ which.max(rsq_slice_checks),
                                  user_selex_metric == 4 ~ which.min(rpd_slice_checks))
 
-
   # for(i in 1:train_slices)
   # {
   #   print(r_forest_all_checks[[best_check_set]][[i]]$model)
@@ -107,6 +106,21 @@ get_check_uncertainty <- function(train_mod,
   # set fitted model to last fold of best check set
   best_squid_rf <- r_forest_all_checks[[best_check_set]][[train_slices]]$model
 
+  # results of each slice prediction from the single best check set
+  results <- NULL
+  for(i in 1:train_slices)
+  {
+    result_each <- bind_rows(r_forest_all_checks[[best_check_set]][[i]]$analy_pred,
+                             r_forest_all_checks[[best_check_set]][[i]]$assm_pred) %>%
+      mutate(slice = i) %>%
+      rename(pred = .pred) %>%
+      mutate(diff = target-pred)
+
+    results <- bind_rows(results, result_each)
+  }
+
   # CIA: you are here-- anything else to output?
-  return(list(best_rf = best_squid_rf))
+  return(list(best_rf = best_squid_rf,
+              uncertainty = uncertainty_split,
+              best_rf_results = results))
 }

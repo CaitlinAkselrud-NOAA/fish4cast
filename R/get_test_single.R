@@ -17,14 +17,14 @@ get_test_single <- function(uncertainty, folds, user_modelname)
   # plot(x = test_info_simple$pred, y = test_info_simple$target)
 
   # plot
-  test_simple <- ggplot()+
-    geom_point(aes(x = test_info_simple$target, y = test_info_simple$pred)) +
-    geom_abline()+
-    theme_classic()+
-    xlab("Observed")+
-    ylab("Predicted")
-
-  get_plot_save(plot = test_simple, plotname_png = "test_simple.png", width = 6, height = 5, model_name = user_modelname)
+  # test_simple <- ggplot()+
+  #   geom_point(aes(x = test_info_simple$target, y = test_info_simple$pred)) +
+  #   geom_abline()+
+  #   theme_classic()+
+  #   xlab("Observed")+
+  #   ylab("Predicted")
+  #
+  # get_plot_save(plot = test_simple, plotname_png = "test_simple.png", width = 6, height = 5, model_name = user_modelname)
 
 
   # save:

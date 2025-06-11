@@ -52,7 +52,7 @@ make_recipe <- function(analysis_data)
 #'
 #' @examples
 #'
-get_baking <- function(kfold, splitN)
+get_baking <- function(kfold, splitN, in_clean)
 {
   d <- get_k_breaks(kfold, splitN)
   analy_data <- d$analysis_data
@@ -60,7 +60,10 @@ get_baking <- function(kfold, splitN)
 
   squid_recipe <- make_recipe(analysis_data = analy_data)
 
-  prepped_squid<- prep(squid_recipe, data= analy_data)
+  clean_squid <- squid_recipe %>%
+    step_rm(!any_of(names(in_clean)))
+
+  prepped_squid<- prep(clean_squid, data= analy_data)
 
   juiced_squid<- juice(prepped_squid)
 
@@ -70,7 +73,9 @@ get_baking <- function(kfold, splitN)
 
   ### do it again for assm data... otherwise you get NAs in the years
   squid_recipe <- make_recipe(assm_data)
-  prepped_squid<- prep(squid_recipe, data= assm_data)
+  clean_squid <- squid_recipe %>%
+    step_rm(!any_of(names(in_clean)))
+  prepped_squid<- prep(clean_squid, data= assm_data)
   juiced_squid<- juice(prepped_squid)
   baked_assessment_squid <- bake(prepped_squid, new_data = assm_data)
 
@@ -87,10 +92,12 @@ get_baking <- function(kfold, splitN)
 #'
 #' @examples
 #'
-get_test_bake <- function(testing_data)
+get_test_bake <- function(testing_data, in_clean)
 {
   squid_recipe <- make_recipe(testing_data)
-  prepped_squid<- prep(squid_recipe, data= testing_data)
+  clean_squid <- squid_recipe %>%
+    step_rm(!any_of(names(in_clean)))
+  prepped_squid<- prep(clean_squid, data= testing_data)
   juiced_squid<- juice(prepped_squid)
   baked_squid <- bake(prepped_squid, new_data = testing_data)
   return(baked_squid)
