@@ -34,6 +34,9 @@ get_obsvpred_plot <- function(data,
                              diff_label == "> 1 SD" ~ "#FFAB38",
                              diff_label == "> 2 SD" ~ "#FF6C57"))
 
+  limits <- c(min(c(data_d$target, data_d$pred)),
+              max(c(data_d$target, data_d$pred)))
+
   data_p <-
     ggplot(data_d, aes(x = target, y = pred, label = time_label)) +
     geom_point( size = 10, aes(color = diff_label)) +
@@ -44,7 +47,7 @@ get_obsvpred_plot <- function(data,
     theme_classic()+
     xlab("Observed")+
     ylab("Predicted") +
-    ylim(min(data_d$target), max(data_d$target)) +
+    ylim(limits[1], limits[2]) +
     labs(caption = paste("SD observed data =", sd_obsv_n, label_units),
          title = label_title) +
     guides(color = guide_legend(title =label_legend)) +
