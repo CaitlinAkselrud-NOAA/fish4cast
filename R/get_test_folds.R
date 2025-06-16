@@ -5,15 +5,26 @@ get_test_folds <- function(test_baked, train_baked, design_set, test_slices, tra
   ptime_test <- system.time({
     for(i in 1:(test_slices))
     {
-      if(i == 1){squid_forests <- list()}
-      print(paste("re-tuning with time step: ", test_baked[[i]]$baked_assessment_squid$time[1]))
+      if(i == 1){
+        squid_forests <- list()
+        new_tune <- bind_rows(train_baked[[train_slices]]$baked_squid,
+                              train_baked[[train_slices]]$baked_assessment_squid)
+
+        squid_forests[[i]] <- furrr::future_pmap(list(mtry = (design_set$mtry), ntrees = (design_set$trees),
+                                                      minn = (design_set$min_n), splitrule = (design_set$splitrule)),
+                                                 get_forest,
+                                                 analy_data = new_tune,
+                                                 assm_data =  test_baked[[i]]$baked_squid,
+                                                 .progress = TRUE)
+        }
+      print(paste("re-tuning with fold step: ", i, "of", test_slices))
       print(paste("start time: ", Sys.time()))
       # bind the full training data set to the first fold of the testing set
       new_tune <- bind_rows(train_baked[[train_slices]]$baked_squid,
                             train_baked[[train_slices]]$baked_assessment_squid,
                             test_baked[[i]]$baked_squid)
 
-      squid_forests[[i]] <- furrr::future_pmap(list(mtry = (design_set$mtry), ntrees = (design_set$trees),
+      squid_forests[[i+1]] <- furrr::future_pmap(list(mtry = (design_set$mtry), ntrees = (design_set$trees),
                                                     minn = (design_set$min_n), splitrule = (design_set$splitrule)),
                                                get_forest,
                                                analy_data = new_tune,
@@ -29,10 +40,10 @@ get_test_folds <- function(test_baked, train_baked, design_set, test_slices, tra
 
     # FIND THE BEST PARAMETER SET **FOR EACH SLICE**
     results <- NULL
-    for(i in 1:test_slices)
+    for(i in 1:(test_slices+1))
     {
-      if(i == 1){best_rmse = vector(length = test_slices)
-      best_hyperparam_set = vector(length = test_slices)}
+      if(i == 1){best_rmse = vector(length = test_slices +1)
+      best_hyperparam_set = vector(length = test_slices +1)}
       # within every slice, there is each hyperparam set
       for(j in 1:dim(design_set)[1])
       {
@@ -51,7 +62,7 @@ get_test_folds <- function(test_baked, train_baked, design_set, test_slices, tra
 
     # SAVE THE BEST FIT FOR EACH SLICE (lowest rmse of any hyperparam set for each set of years predicted)
     best_hparams_slice <- NULL
-    for(i in 1:test_slices)
+    for(i in 1:(test_slices +1))
     {
       if(i == 1){best_ofeach_slice <- list()}
       # save info from each slice and best set
