@@ -28,10 +28,10 @@ get_forest <- function(mtry, ntrees, minn, splitrule, analy_data, assm_data)
     parsnip::fit(target ~ ., data = analy_data) #, na.action = na.exclude)
 
   pred_assm <- predict(squid_rf, new_data = assm_data) %>%
-    bind_cols(target = assm_data$target, time = assm_data$time)
+    bind_cols(target = assm_data$target) #, time = assm_data$time)
 
   pred_analysis <- predict(squid_rf, new_data = analy_data) %>%
-    bind_cols(target = analy_data$target, time = analy_data$time)
+    bind_cols(target = analy_data$target) #, time = analy_data$time)
 
   rmse <-  yardstick::rmse_vec(truth = pred_assm$target, estimate = pred_assm$.pred)
   squid_rf$rmse <- rmse
