@@ -12,7 +12,8 @@ get_test_single <- function(uncertainty, folds, user_modelname)
     summarise(rsquared = yardstick::rsq_vec(truth = target, estimate = pred),
               rmse = yardstick::rmse_vec(truth = target, estimate = pred))
 
-  test_info_simple <- bind_cols(time = folds$test_simple$time, test_pred) %>%
+  test_info_simple <- test_pred %>%
+    # bind_cols(time = folds$test_simple$time, test_pred) %>%
     mutate(diff = target-pred)
   # plot(x = test_info_simple$pred, y = test_info_simple$target)
 
