@@ -14,6 +14,8 @@ get_regimes <- function(dat, dat_dist, n_states, n_iters = 200)
 {
   dat_names <- names(dat)
 
+  # dat %<>% na.omit()
+
   AICs <- 0
   best_aic <- 1.0e10
   best_model<-NULL
@@ -47,6 +49,10 @@ get_regimes <- function(dat, dat_dist, n_states, n_iters = 200)
 
     #fit model
     hmm_new$fit(silent = TRUE)
+    # CIA: if this step errors out, you need to reinstall matrix-dependent packages from source:
+    #tools::package_dependencies("Matrix", which = "LinkingTo", reverse = TRUE)[[1L]]
+    #utils::install.packages("TMB", type = "source")
+
     out<-hmm_new$out()
 
     if(out$convcode < 1){
