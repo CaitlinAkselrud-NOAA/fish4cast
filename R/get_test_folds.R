@@ -73,12 +73,22 @@ get_test_folds <- function(test_baked, train_baked, design_set, test_slices, tra
                                                             rmse = best_rmse[i],
                                                             slice = i))
     }
+
+    # SAVE VARIABLE IMPORTANCE FOR ALL FOLDS IN TUNED MODEL
+    for(i in 1: test_slices +1)
+    {
+      if(i == 1){var_import_slices_test <- NULL}
+      var_import <- squid_forests[[i]][[best_hyperparam_set[i]]]$var_importance %>%
+        as_tibble() %>%
+        bind_cols(names = names(squid_forests[[i]][[best_hyperparam_set[i]]]$var_importance)) %>%
+        pivot_wider(values_from = value, names_from = names)
+      var_import_slices_test <- bind_rows(var_import_slices_test, var_import)
+    }
   })
 
   write_csv(best_hparams_slice, path = here::here("output", user_modelname,"test_predictions_slice_hparms.csv"))
   write_csv(results, path = here::here("output", user_modelname,"test_predictions_slice_all.csv"))
 
-  return(results)
-
+  return(list(results = results, var_import_slices_test = var_import_slices_test))
 
 }
