@@ -75,9 +75,10 @@ get_test_folds <- function(test_baked, train_baked, design_set, test_slices, tra
     }
 
     # SAVE VARIABLE IMPORTANCE FOR ALL FOLDS IN TUNED MODEL
+    var_import_slices_test <- NULL
     for(i in 1: test_slices +1)
     {
-      if(i == 1){var_import_slices_test <- NULL}
+      # if(i == 1){}
       var_import <- squid_forests[[i]][[best_hyperparam_set[i]]]$var_importance %>%
         as_tibble() %>%
         bind_cols(names = names(squid_forests[[i]][[best_hyperparam_set[i]]]$var_importance)) %>%
