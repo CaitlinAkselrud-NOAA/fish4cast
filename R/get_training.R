@@ -16,7 +16,8 @@ get_training <- function(train_slices,
                          design_set,
                          train_baked,
                          user_hp_select = 1,
-                         user_modelname = "default")
+                         user_modelname = "default",
+                         setup_doublefit = "TRUE")
 {
   train_time <- system.time({
     print("starting hyperparam tuning-- please be patient")
@@ -68,6 +69,8 @@ get_training <- function(train_slices,
     }
     print(paste("end prior hyperparam tuning time: ", Sys.time()))
 
+  if(setup_doublefit == TRUE)
+  {
     print(paste("beginning posterior hyperparam tuning time: ", Sys.time()))
     # models within x% of the minimum rmse:
 
@@ -101,55 +104,55 @@ get_training <- function(train_slices,
                           rmse = best_rmse_group,
                           combo = combo)
 
-    post_color <- "#0072B2" # "#CC79A7" "#D55E00"
-    post_outline <- "#e9ecef"
-
-    p_post_tree <- ggplot() +
-      geom_histogram(aes(design_set$trees)) +
-      geom_histogram(aes(new_grid$trees), fill = post_color, color = post_outline) +
-      theme_classic()
-
-    p_post_mtries <- ggplot() +
-      geom_histogram(aes(design_set$mtry)) +
-      geom_histogram(aes(new_grid$mtry), fill = post_color, color = post_outline) +
-      theme_classic()
-
-    p_post_minn <- ggplot() +
-      geom_histogram(aes(design_set$min_n)) +
-      geom_histogram(aes(new_grid$min_n), fill = post_color, color = post_outline) +
-      theme_classic()
-
-    p_post_rmse <- ggplot() +
-      geom_histogram(aes(rmse_slice)) +
-      geom_histogram(aes(best_rmse_group), fill = post_color, color = post_outline) +
-      theme_classic()
-
-    p_full_post <- p_post_rmse/(p_post_tree + p_post_mtries + p_post_minn)
-
-    p_post_tree <- ggplot() +
-      # geom_histogram(aes(design_set$trees)) +
-      geom_histogram(aes(new_grid$trees), fill = post_color, color = post_outline) +
-      theme_classic()
-
-    p_post_mtries <- ggplot() +
-      # geom_histogram(aes(design_set$mtry)) +
-      geom_histogram(aes(new_grid$mtry), fill = post_color, color = post_outline) +
-      theme_classic()
-
-    p_post_minn <- ggplot() +
-      # geom_histogram(aes(design_set$min_n)) +
-      geom_histogram(aes(new_grid$min_n), fill = post_color, color = post_outline) +
-      theme_classic()
-
-    p_post_rmse <- ggplot() +
-      # geom_histogram(aes(rmse_slice)) +
-      geom_histogram(aes(best_rmse_group), fill = post_color, color = post_outline) +
-      theme_classic()
-
-    p_post <- p_post_rmse/(p_post_tree + p_post_mtries + p_post_minn)
-
-    get_plot_save(plot = p_full_post, plotname_png = "p_training_priorandpost.png", model_name = user_modelname)
-    get_plot_save(plot = p_post, plotname_png = "p_training_posterior.png", model_name = user_modelname)
+    # post_color <- "#0072B2" # "#CC79A7" "#D55E00"
+    # post_outline <- "#e9ecef"
+    #
+    # p_post_tree <- ggplot() +
+    #   geom_histogram(aes(design_set$trees)) +
+    #   geom_histogram(aes(new_grid$trees), fill = post_color, color = post_outline) +
+    #   theme_classic()
+    #
+    # p_post_mtries <- ggplot() +
+    #   geom_histogram(aes(design_set$mtry)) +
+    #   geom_histogram(aes(new_grid$mtry), fill = post_color, color = post_outline) +
+    #   theme_classic()
+    #
+    # p_post_minn <- ggplot() +
+    #   geom_histogram(aes(design_set$min_n)) +
+    #   geom_histogram(aes(new_grid$min_n), fill = post_color, color = post_outline) +
+    #   theme_classic()
+    #
+    # p_post_rmse <- ggplot() +
+    #   geom_histogram(aes(rmse_slice)) +
+    #   geom_histogram(aes(best_rmse_group), fill = post_color, color = post_outline) +
+    #   theme_classic()
+    #
+    # p_full_post <- p_post_rmse/(p_post_tree + p_post_mtries + p_post_minn)
+    #
+    # p_post_tree <- ggplot() +
+    #   # geom_histogram(aes(design_set$trees)) +
+    #   geom_histogram(aes(new_grid$trees), fill = post_color, color = post_outline) +
+    #   theme_classic()
+    #
+    # p_post_mtries <- ggplot() +
+    #   # geom_histogram(aes(design_set$mtry)) +
+    #   geom_histogram(aes(new_grid$mtry), fill = post_color, color = post_outline) +
+    #   theme_classic()
+    #
+    # p_post_minn <- ggplot() +
+    #   # geom_histogram(aes(design_set$min_n)) +
+    #   geom_histogram(aes(new_grid$min_n), fill = post_color, color = post_outline) +
+    #   theme_classic()
+    #
+    # p_post_rmse <- ggplot() +
+    #   # geom_histogram(aes(rmse_slice)) +
+    #   geom_histogram(aes(best_rmse_group), fill = post_color, color = post_outline) +
+    #   theme_classic()
+    #
+    # p_post <- p_post_rmse/(p_post_tree + p_post_mtries + p_post_minn)
+    #
+    # get_plot_save(plot = p_full_post, plotname_png = "p_training_priorandpost.png", model_name = user_modelname)
+    # get_plot_save(plot = p_post, plotname_png = "p_training_posterior.png", model_name = user_modelname)
 
     # new_grid %>% bind_rows(new_grid)
     new_grid <-bind_rows(replicate(10, bind_rows(new_grid, new_grid), simplify = FALSE))
@@ -230,8 +233,8 @@ get_training <- function(train_slices,
                           min_n = min_ns, splitrule = splitrules, rmse = best_rmse_group)
 
     print(paste("end posterior hyperparam tuning time: ", Sys.time()))
+  }
   })
-
   # FIND THE BEST PARAMETER SET
   # 1 = rmse
   # 2 = mae
@@ -259,34 +262,34 @@ get_training <- function(train_slices,
                              min_n = best_minn,
                              splitrule = best_splitrule)
   # post post plots
-  p_post_tree <- ggplot() +
-    geom_histogram(aes(new_grid$trees), fill = post_color, color = post_outline) +
-    geom_histogram(aes(train_results$ntrees), fill = "#D55E00") +
-    theme_classic()
-
-  p_post_mtries <- ggplot() +
-    geom_histogram(aes(new_grid$mtry), fill = post_color, color = post_outline) +
-    geom_histogram(aes(train_results$mtry), fill = "#D55E00") +
-    theme_classic()
-
-  p_post_minn <- ggplot() +
-    geom_histogram(aes(new_grid$min_n), fill = post_color, color = post_outline) +
-    geom_histogram(aes(train_results$min_n), fill = "#D55E00") +
-    theme_classic()
-
-  best_metric <- dplyr::case_when(user_hp_select == 1 ~ min(rmse_slice),
-                                  user_hp_select == 2 ~ min(mae_slice),
-                                  user_hp_select == 3 ~ max(rsq_slice),
-                                  user_hp_select == 4 ~ min(rpd_slice))
-
-  p_post_rmse <- ggplot() +
-    geom_histogram(aes(best_rmse_group), fill = post_color, color = post_outline) +
-    geom_histogram(aes(best_metric), fill = "#D55E00") +
-    theme_classic()
-
-  p_postpost <- p_post_rmse/(p_post_tree + p_post_mtries + p_post_minn)
-
-  get_plot_save(plot = p_postpost, plotname_png = "p_hparam_best_selex.png", model_name = user_modelname)
+  # p_post_tree <- ggplot() +
+  #   geom_histogram(aes(new_grid$trees), fill = post_color, color = post_outline) +
+  #   geom_histogram(aes(train_results$ntrees), fill = "#D55E00") +
+  #   theme_classic()
+  #
+  # p_post_mtries <- ggplot() +
+  #   geom_histogram(aes(new_grid$mtry), fill = post_color, color = post_outline) +
+  #   geom_histogram(aes(train_results$mtry), fill = "#D55E00") +
+  #   theme_classic()
+  #
+  # p_post_minn <- ggplot() +
+  #   geom_histogram(aes(new_grid$min_n), fill = post_color, color = post_outline) +
+  #   geom_histogram(aes(train_results$min_n), fill = "#D55E00") +
+  #   theme_classic()
+  #
+  # best_metric <- dplyr::case_when(user_hp_select == 1 ~ min(rmse_slice),
+  #                                 user_hp_select == 2 ~ min(mae_slice),
+  #                                 user_hp_select == 3 ~ max(rsq_slice),
+  #                                 user_hp_select == 4 ~ min(rpd_slice))
+  #
+  # p_post_rmse <- ggplot() +
+  #   geom_histogram(aes(best_rmse_group), fill = post_color, color = post_outline) +
+  #   geom_histogram(aes(best_metric), fill = "#D55E00") +
+  #   theme_classic()
+  #
+  # p_postpost <- p_post_rmse/(p_post_tree + p_post_mtries + p_post_minn)
+  #
+  # get_plot_save(plot = p_postpost, plotname_png = "p_hparam_best_selex.png", model_name = user_modelname)
 
 
 
@@ -302,10 +305,10 @@ get_training <- function(train_slices,
   }
 
   # trained model info:
-  write(paste("Time elapsed for model training (mins): ", round(train_time[3], digits = 2)),
-        file = here::here("output", user_modelname, "info.txt"), append = TRUE)
-  write(paste("Design set number of combos: ", dim(new_grid)[1]),
-        file = here::here("output", user_modelname, "info.txt"), append = TRUE)
+  # write(paste("Time elapsed for model training (mins): ", round(train_time[3], digits = 2)),
+  #       file = here::here("output", user_modelname, "info.txt"), append = TRUE)
+  # write(paste("Design set number of combos: ", dim(new_grid)[1]),
+  #       file = here::here("output", user_modelname, "info.txt"), append = TRUE)
   write_csv(train_results, file = here::here("output", user_modelname, "train_hparam_results.csv"))
 
   # save best model info
@@ -409,7 +412,7 @@ get_training <- function(train_slices,
   # * * variable importance -------------------------------------------------
 
   # variable importance:
-  write_csv(var_import_slices_train, path = here::here("output", user_modelname, "train_var_import.csv"))
+  write_csv(var_import_slices_train, file = here::here("output", user_modelname, "train_var_import.csv"))
 
   return(list(trained_model = r_forest_all[[best_hyperparam_set]],
               train_hparams = train_results,
