@@ -17,7 +17,7 @@ get_training <- function(train_slices,
                          train_baked,
                          user_hp_select = 1,
                          user_modelname = "default",
-                         setup_doublefit = "TRUE")
+                         setup_doublefit)
 {
   train_time <- system.time({
     print("starting hyperparam tuning-- please be patient")
