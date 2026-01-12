@@ -38,6 +38,7 @@ get_test_single <- function(uncertainty, folds, user_modelname)
   print(test_single_save)
   sink()
 
-  return(test_simple_result = test_info_simple)
+  return(list(test_simple_result = test_info_simple,
+              vip = folds$test_simple))
 
 }
