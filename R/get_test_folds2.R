@@ -87,8 +87,8 @@ get_test_folds2 <- function(test_baked, train_baked, design_set, test_slices, tr
     }
   })
 
-  write_csv(best_hparams_slice, path = here::here("output", user_modelname,"test_predictions_slice_hparms.csv"))
-  write_csv(results, path = here::here("output", user_modelname,"test_predictions_slice_all.csv"))
+  # write_csv(best_hparams_slice, path = here::here("output", user_modelname,"test_predictions_slice_hparms.csv"))
+  # write_csv(results, path = here::here("output", user_modelname,"test_predictions_slice_all.csv"))
 
   return(list(results = results, var_import_slices_test = var_import_slices_test,
               models = squid_forests, best_set = best_hyperparam_set))
